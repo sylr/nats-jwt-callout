@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/cel-go/cel"
 	"github.com/nats-io/jwt/v2"
 	"gopkg.in/yaml.v3"
 
@@ -34,7 +35,8 @@ type Rule struct {
 	Match Match  `yaml:"match"`
 	Grant Grant  `yaml:"grant"`
 
-	matcher *regexp.Regexp // compiled sub, nil when unset
+	matcher    *regexp.Regexp // compiled sub, nil when unset
+	celProgram cel.Program    // compiled Match.Expr, nil when unset
 }
 
 // Match describes the conditions an identity must satisfy. All set fields must
@@ -53,7 +55,13 @@ type Match struct {
 	// flattened claim set (e.g. {"repository": "owner/repo"},
 	// {"aws.aws_account": "123456789012"}).
 	Claims map[string]string `yaml:"claims"`
-	// AllowBroad opts a rule into matching without a strong identity pin.
+	// Expr is an optional CEL expression (must evaluate to bool) AND-ed with the
+	// other conditions. It is given the variables sub, iss, aud, claims, exp, now
+	// (see newCELEnv). Because an expression cannot be statically verified as
+	// narrowly scoped, any rule using Expr must also set AllowBroad.
+	Expr string `yaml:"expr"`
+	// AllowBroad opts a rule into matching without a strong identity pin (and is
+	// required for any rule using Expr).
 	AllowBroad bool `yaml:"allow_broad"`
 }
 
@@ -124,6 +132,7 @@ func (p *Policy) Validate() error {
 	if len(p.Rules) == 0 {
 		return fmt.Errorf("policy has no rules")
 	}
+	var celEnv *cel.Env // created lazily on the first rule that uses Expr
 	for i := range p.Rules {
 		r := &p.Rules[i]
 		if r.Grant.Account == "" {
@@ -134,6 +143,26 @@ func (p *Policy) Validate() error {
 			return fmt.Errorf("rule %q: %w", r.identity(i), err)
 		}
 		r.matcher = re
+
+		if r.Match.Expr != "" {
+			// A CEL expression is opaque to the broad-rule guardrail, so it must
+			// be explicitly acknowledged.
+			if !r.Match.AllowBroad {
+				return fmt.Errorf("rule %q uses a CEL expr, which cannot be statically "+
+					"verified as narrowly scoped; set allow_broad: true to confirm", r.identity(i))
+			}
+			if celEnv == nil {
+				if celEnv, err = newCELEnv(); err != nil {
+					return fmt.Errorf("cel environment: %w", err)
+				}
+			}
+			prg, err := compileCELProgram(celEnv, r.Match.Expr)
+			if err != nil {
+				return fmt.Errorf("rule %q: %w", r.identity(i), err)
+			}
+			r.celProgram = prg
+		}
+
 		if !r.hasStrongPin() && !r.Match.AllowBroad {
 			return fmt.Errorf("rule %q is broad: it has no strong identity pin "+
 				"(an exact sub, a literal AWS account, or repository/repository_id/"+
@@ -176,6 +205,9 @@ func (r *Rule) matches(id *identity.Identity) bool {
 		if got, ok := id.Claim(k); !ok || got != want {
 			return false
 		}
+	}
+	if r.celProgram != nil && !evalCEL(r.celProgram, id) {
+		return false
 	}
 	return true
 }

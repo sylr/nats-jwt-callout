@@ -159,6 +159,28 @@ issuers:
 > `*_id` claims; the default `sub` shape also varies (branch/PR/environment/
 > custom/immutable subjects), so match on `repository` rather than `sub`.
 
+## Dynamic conditions (CEL)
+
+For checks the declarative `issuer`/`sub`/`claims` matchers can't express, a rule
+may add a [CEL](https://github.com/google/cel-go) expression, AND-ed with the
+other conditions and required to evaluate to a bool:
+
+```yaml
+- match:
+    issuer: "https://token.actions.githubusercontent.com"
+    expr: 'claims["repository_owner"] == "sylr" && claims["ref"].startsWith("refs/heads/")'
+    allow_broad: true   # required for any expr rule
+  grant: { account: APP, subscribe: { allow: ["telemetry.>"] } }
+```
+
+Variables: `sub` (string), `iss` (string), `aud` (list), `claims`
+(map<string,string>), `exp` and `now` (timestamps). Claim values are strings — use
+`int(claims["..."])` for numeric comparisons. Expressions are compiled and
+type-checked at startup (must return bool) and run under a cost limit; a runtime
+error fails closed (the rule doesn't match). Because an expression can't be
+statically verified as narrowly scoped, **any rule using `expr` must set
+`allow_broad: true`**.
+
 ## Metrics
 
 An optional Prometheus endpoint is exposed when configured:

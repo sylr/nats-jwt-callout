@@ -12,6 +12,11 @@
 #
 # A rule must carry a "strong" identity pin (an exact sub, a literal AWS account,
 # or repository/repository_id/job_workflow_ref) or set allow_broad: true.
+#
+# For conditions the declarative matchers can't express, a rule may add an
+# optional CEL expression (must evaluate to bool), AND-ed with the rest. Its
+# variables are sub, iss, aud, claims, exp, now. An expr cannot be statically
+# checked for scope, so any rule using it must also set allow_broad: true.
 rules:
 # GitHub Actions: this repo (any branch/workflow) gets read-only telemetry.
 # Pin the repository — repository_owner alone would be "broad". Prefer the
@@ -46,3 +51,17 @@ rules:
       max: 1
       ttl: "1m"
     max_expiry: "1h"
+
+# Advanced: a CEL expression for dynamic conditions (here: any branch ref in the
+# org). Variables: sub, iss, aud, claims, exp, now. Requires allow_broad: true.
+- name: github-branches-cel
+  match:
+    issuer: "https://token.actions.githubusercontent.com"
+    expr: 'claims["repository_owner"] == "sylr" && claims["ref"].startsWith("refs/heads/")'
+    allow_broad: true
+  grant:
+    account: APP
+    subscribe:
+      allow: ["telemetry.>", "_INBOX.>"]
+    publish:
+      deny: [">"]

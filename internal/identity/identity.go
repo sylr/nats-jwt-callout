@@ -63,6 +63,12 @@ func (i *Identity) Claim(name string) (string, bool) {
 	return v, ok
 }
 
+// Claims returns the flattened claim map (e.g. for CEL evaluation). The returned
+// map is the internal one and must not be modified.
+func (i *Identity) Claims() map[string]string {
+	return i.claims
+}
+
 // Parse flattens a verified token's JSON payload into a matchable claim set. It
 // does not populate the first-class fields (Issuer/Subject/Audience/Expiry); the
 // verifier sets those from the authenticated token. Parsing degrades gracefully:
