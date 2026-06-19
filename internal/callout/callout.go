@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/nats-io/jwt/v2"
@@ -23,13 +24,19 @@ import (
 // or the token; detailed diagnostics go to the structured logger instead.
 var errDenied = errors.New("authorization denied")
 
-// Authorizer issues user JWTs for verified AWS identities.
-type Authorizer struct {
+// ruleset is the hot-swappable part of the authorizer: the verifier and policy.
+// It is replaced atomically on reload.
+type ruleset struct {
 	verifier *verifier.Verifier
 	policy   *authz.Policy
-	signKey  nkeys.KeyPair // issuer account key (SA…); also signs the response
-	logger   *slog.Logger
-	metrics  *metrics.Metrics // nil-safe; nil disables instrumentation
+}
+
+// Authorizer issues user JWTs for verified AWS identities.
+type Authorizer struct {
+	state   atomic.Pointer[ruleset] // verifier + policy, swapped atomically on Reload
+	signKey nkeys.KeyPair           // issuer account key (SA…); also signs the response
+	logger  *slog.Logger
+	metrics *metrics.Metrics // nil-safe; nil disables instrumentation
 	// verifyTimeout bounds the per-request token verification (JWKS fetch on a
 	// cold cache, etc.).
 	verifyTimeout time.Duration
@@ -41,14 +48,21 @@ func New(v *verifier.Verifier, policy *authz.Policy, signKey nkeys.KeyPair, logg
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Authorizer{
-		verifier:      v,
-		policy:        policy,
+	a := &Authorizer{
 		signKey:       signKey,
 		logger:        logger,
 		metrics:       m,
 		verifyTimeout: 10 * time.Second,
 	}
+	a.state.Store(&ruleset{verifier: v, policy: policy})
+	return a
+}
+
+// Reload atomically swaps the verifier and policy used for subsequent
+// authorizations. It is safe to call concurrently with Authorize; in-flight
+// requests finish against the ruleset they loaded.
+func (a *Authorizer) Reload(v *verifier.Verifier, policy *authz.Policy) {
+	a.state.Store(&ruleset{verifier: v, policy: policy})
 }
 
 // Authorize is the synadia-io/callout.go AuthorizerFn. It returns an encoded,
@@ -58,6 +72,10 @@ func (a *Authorizer) Authorize(req *jwt.AuthorizationRequest) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), a.verifyTimeout)
 	defer cancel()
 
+	// Snapshot the current verifier+policy for the whole request, so a concurrent
+	// Reload can't swap them mid-evaluation.
+	st := a.state.Load()
+
 	// The AWS token is carried as the connection auth_token.
 	token := req.ConnectOptions.Token
 	if token == "" {
@@ -66,7 +84,7 @@ func (a *Authorizer) Authorize(req *jwt.AuthorizationRequest) (string, error) {
 		return "", errDenied
 	}
 
-	id, err := a.verifier.Verify(ctx, token)
+	id, err := st.verifier.Verify(ctx, token)
 	if err != nil {
 		a.logger.Warn("connection rejected: token verification failed",
 			"user_nkey", req.UserNkey, "error", err)
@@ -74,7 +92,7 @@ func (a *Authorizer) Authorize(req *jwt.AuthorizationRequest) (string, error) {
 		return "", errDenied
 	}
 
-	decision, err := a.policy.Evaluate(id)
+	decision, err := st.policy.Evaluate(id)
 	if err != nil {
 		a.logger.Warn("connection rejected: no policy match",
 			"user_nkey", req.UserNkey, "iss", id.Issuer, "sub", id.Subject,

@@ -9,6 +9,8 @@ Type=simple
 User=nats-jwt-callout
 Group=nats-jwt-callout
 ExecStart=/usr/bin/nats-jwt-callout -config /etc/nats-jwt-callout/config.yaml
+# `systemctl reload nats-jwt-callout` hot-reloads the policy and issuers (SIGHUP).
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
 

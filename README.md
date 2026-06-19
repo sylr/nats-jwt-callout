@@ -159,6 +159,28 @@ issuers:
 > `*_id` claims; the default `sub` shape also varies (branch/PR/environment/
 > custom/immutable subjects), so match on `repository` rather than `sub`.
 
+## Configuration reload
+
+Send **`SIGHUP`** to reload the config file without dropping the NATS connection
+or restarting the callout service:
+
+```sh
+kill -HUP <pid>                          # or, with the systemd unit:
+sudo systemctl reload nats-jwt-callout
+```
+
+Reload is **best-effort and atomic**: the config is re-read, the verifier (OIDC
+discovery) and policy are rebuilt and validated, and only if all of that succeeds
+are they swapped in. If the new config is invalid (parse error, discovery
+failure, bad policy), the error is logged and the **previous config keeps
+serving**. In-flight authorizations finish against the config they started with.
+
+- **Hot-reloaded:** the authorization policy (incl. `policy_file`), trusted
+  issuers / `require_claims`, audiences, signing-alg allowlist.
+- **Requires a restart:** the NATS connection settings, the issuer/xkey seeds,
+  and the metrics endpoint — a change to these is logged as a warning and ignored
+  until restart.
+
 ## Dynamic conditions (CEL)
 
 For checks the declarative `issuer`/`sub`/`claims` matchers can't express, a rule

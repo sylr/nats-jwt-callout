@@ -85,19 +85,7 @@ func run(logger *slog.Logger, configPath string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	issuers := make([]verifier.IssuerOption, 0, len(cfg.Issuers))
-	for _, iss := range cfg.Issuers {
-		issuers = append(issuers, verifier.IssuerOption{
-			URL:           iss.URL,
-			RequireClaims: iss.RequireClaims,
-		})
-	}
-	v, err := verifier.New(ctx, verifier.Options{
-		Issuers:     issuers,
-		Audiences:   cfg.Audiences,
-		SigningAlgs: cfg.SigningAlgs,
-		HTTPTimeout: cfg.HTTPTimeout,
-	})
+	v, err := buildVerifier(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -141,10 +129,79 @@ func run(logger *slog.Logger, configPath string) error {
 	}
 	defer func() { _ = svc.Stop() }()
 
+	go watchReloads(ctx, configPath, cfg, authorizer, logger)
+
 	logger.Info("auth callout service started; waiting for requests")
 	<-ctx.Done()
 	logger.Info("shutting down")
 	return nil
+}
+
+// buildVerifier constructs the OIDC verifier from the configured issuers
+// (performing discovery). Used at startup and on reload.
+func buildVerifier(ctx context.Context, cfg *config.Config) (*verifier.Verifier, error) {
+	issuers := make([]verifier.IssuerOption, 0, len(cfg.Issuers))
+	for _, iss := range cfg.Issuers {
+		issuers = append(issuers, verifier.IssuerOption{
+			URL:           iss.URL,
+			RequireClaims: iss.RequireClaims,
+		})
+	}
+	return verifier.New(ctx, verifier.Options{
+		Issuers:     issuers,
+		Audiences:   cfg.Audiences,
+		SigningAlgs: cfg.SigningAlgs,
+		HTTPTimeout: cfg.HTTPTimeout,
+	})
+}
+
+// watchReloads reloads the verifier and policy on SIGHUP. Reload is best-effort:
+// if the new config is invalid (parse error, OIDC discovery failure, bad policy),
+// the previous config keeps serving. Settings that can't be hot-swapped (NATS
+// connection, signing/xkey seeds, metrics endpoint) are reported as needing a
+// restart.
+func watchReloads(ctx context.Context, configPath string, current *config.Config, a *authzcallout.Authorizer, logger *slog.Logger) {
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-hup:
+			logger.Info("SIGHUP received; reloading config", "path", configPath)
+			newCfg, err := config.Load(configPath)
+			if err != nil {
+				logger.Error("config reload failed; keeping previous config", "error", err)
+				continue
+			}
+			warnUnreloadable(current, newCfg, logger)
+			v, err := buildVerifier(ctx, newCfg)
+			if err != nil {
+				logger.Error("config reload failed; keeping previous config", "error", err)
+				continue
+			}
+			a.Reload(v, &newCfg.Policy)
+			current = newCfg
+			logger.Info("config reloaded",
+				"issuers", len(newCfg.Issuers), "policy_rules", len(newCfg.Policy.Rules))
+		}
+	}
+}
+
+// warnUnreloadable logs a warning for each setting that changed but can only take
+// effect after a restart.
+func warnUnreloadable(oldCfg, newCfg *config.Config, logger *slog.Logger) {
+	if oldCfg.NATS != newCfg.NATS {
+		logger.Warn("nats connection settings changed; restart required to apply")
+	}
+	if oldCfg.IssuerAccountSeed != newCfg.IssuerAccountSeed || oldCfg.XKeySeed != newCfg.XKeySeed {
+		logger.Warn("signing/xkey seeds changed; restart required to apply")
+	}
+	if oldCfg.Metrics != newCfg.Metrics {
+		logger.Warn("metrics settings changed; restart required to apply")
+	}
 }
 
 func connectNATS(cfg config.NATSConfig) (*nats.Conn, error) {

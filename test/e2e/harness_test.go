@@ -32,11 +32,13 @@ const (
 // harness is a running embedded NATS server with the auth callout service wired
 // to a verifier trusting a mock OIDC IdP.
 type harness struct {
-	srv     *server.Server
-	idp     *mockoidc.Server
-	svc     *calloutlib.AuthorizationService
-	svcConn *nats.Conn
-	metrics *metrics.Metrics
+	srv        *server.Server
+	idp        *mockoidc.Server
+	svc        *calloutlib.AuthorizationService
+	svcConn    *nats.Conn
+	metrics    *metrics.Metrics
+	authorizer *callout.Authorizer
+	verifier   *verifier.Verifier
 }
 
 // setup builds the full stack against a hermetic mock OIDC IdP.
@@ -152,7 +154,7 @@ authorization {
 	}
 	t.Cleanup(func() { _ = svc.Stop() })
 
-	return &harness{srv: srv, svc: svc, svcConn: svcConn, metrics: m}
+	return &harness{srv: srv, svc: svc, svcConn: svcConn, metrics: m, authorizer: authorizer, verifier: v}
 }
 
 // appPolicy returns a policy granting the given ARN access to the APP account
