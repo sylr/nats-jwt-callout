@@ -55,11 +55,24 @@ go build ./cmd/nats-jwt-callout
 
 ## Configure
 
-Generate the keys the server and service share (using the NATS `nk` tool):
+Generate the keys the server and service share (using the NATS `nk` tool). With
+`-pubout`, `nk -gen` prints **two lines**: the seed first, then its public key.
 
 ```sh
-nk -gen account   # prints an account seed (SA…); its public key (A…) is the `issuer`
-nk -gen curve     # prints a curve seed (SX…); its public key (X…) is the `xkey`
+go install github.com/nats-io/nkeys/nk@latest   # install the nk tool
+
+nk -gen account -pubout   # line 1: account seed (SA…)  → issuer_account_seed
+                          # line 2: account public (A…) → auth_callout.issuer
+nk -gen curve -pubout     # line 1: curve seed   (SX…)  → xkey_seed
+                          # line 2: curve public (X…)   → auth_callout.xkey
+```
+
+To derive the public key from a seed you already have (e.g. one stored in your
+secret store), feed the seed back in with `-inkey … -pubout`:
+
+```sh
+printf '%s' "$ISSUER_ACCOUNT_SEED" > account.seed
+nk -inkey account.seed -pubout    # → account public key (A…)
 ```
 
 - Put the **public** account key in the server's `auth_callout.issuer` and the
