@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # No id-token: write here on purpose — the real-GitHub-OIDC e2e
+    # (TestGitHubActionsToken) self-skips without the token endpoint and runs
+    # in the dedicated github-oidc-e2e job below instead.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+
+      - name: Verify modules are tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      - name: Test (race + hermetic e2e)
+        run: go test -race -count=1 ./...
+
+      - name: Build (all tags compile)
+        run: |
+          go build ./...
+          go vet -tags e2e_aws ./test/e2e/...
+
+  github-oidc-e2e:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Exposes ACTIONS_ID_TOKEN_REQUEST_URL/TOKEN so TestGitHubActionsToken can
+      # mint a real GitHub OIDC token. Fork PRs don't get it → the test skips and
+      # this job is green.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+
+      - name: GitHub OIDC end-to-end (embedded nats-server + callout + real token)
+        run: go test -race -count=1 -v -run TestGitHubActionsToken ./test/e2e/...
+
+  goreleaser-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: check

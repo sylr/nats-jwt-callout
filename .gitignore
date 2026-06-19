@@ -1,0 +1,9 @@
+/dist/
+/nats-jwt-callout
+*.out
+*.test
+.DS_Store
+
+# Local secrets — never commit real seeds or creds.
+*.creds
+*-local.yaml

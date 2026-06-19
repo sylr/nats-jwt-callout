@@ -1,0 +1,69 @@
+version: 2
+
+project_name: nats-jwt-callout
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: nats-jwt-callout
+    main: ./cmd/nats-jwt-callout
+    binary: nats-jwt-callout
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE*
+      - examples/**/*
+
+checksum:
+  name_template: "checksums.txt"
+
+sboms:
+  - artifacts: archive
+
+dockers:
+  - id: nats-jwt-callout
+    image_templates:
+      - "ghcr.io/sylr/nats-jwt-callout:{{ .Version }}"
+      - "ghcr.io/sylr/nats-jwt-callout:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--label=org.opencontainers.image.source=https://github.com/sylr/nats-jwt-callout"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  prerelease: auto

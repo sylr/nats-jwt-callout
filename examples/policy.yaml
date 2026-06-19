@@ -1,0 +1,45 @@
+# Authorization policy: ordered rules; the first match wins; no match denies.
+#
+# Match on the verified identity (provider-neutral):
+#   - issuer: restrict the rule to one trusted issuer (recommended for
+#     provider-specific rules).
+#   - sub: glob (only "*" is special) or "re:"-prefixed anchored regex, matched
+#     against the whole subject.
+#   - claims: exact match on flattened claims. AWS-namespaced claims are prefixed
+#     "aws." (e.g. aws.aws_account, aws.principal_tags.env); GitHub claims are
+#     top-level (repository, repository_owner, ref, …).
+#
+# A rule must carry a "strong" identity pin (an exact sub, a literal AWS account,
+# or repository/repository_id/job_workflow_ref) or set allow_broad: true.
+rules:
+  # AWS: a specific IAM role gets full access to the APP account's app.* space.
+  - name: aws-data-role
+    match:
+      issuer: "https://abc123-def456.tokens.sts.global.api.aws"
+      sub: "arn:aws:iam::123456789012:role/DataProcessingRole"
+    grant:
+      account: APP
+      publish:
+        allow: ["app.>"]
+      subscribe:
+        allow: ["app.>", "_INBOX.>"]
+      response:
+        max: 1
+        ttl: "1m"
+      max_expiry: "1h"
+
+  # GitHub Actions: this repo (any branch/workflow) gets read-only telemetry.
+  # Pin the repository — repository_owner alone would be "broad". Prefer the
+  # immutable repository_id where you can, since names can be renamed/transferred.
+  - name: github-ci
+    match:
+      issuer: "https://token.actions.githubusercontent.com"
+      claims:
+        repository: "sylr/nats-jwt-callout"
+        # repository_id: "123456789"   # immutable; survives rename/transfer
+    grant:
+      account: APP
+      subscribe:
+        allow: ["telemetry.>", "_INBOX.>"]
+      publish:
+        deny: [">"]
