@@ -10,7 +10,7 @@ fi
 
 if ! getent passwd nats-jwt-callout >/dev/null 2>&1; then
     useradd --system --gid nats-jwt-callout \
-        --home-dir /var/lib/nats-jwt-callout --no-create-home \
+        --home-dir /nonexistent --no-create-home \
         --shell /usr/sbin/nologin \
         --comment "NATS auth callout service" \
         nats-jwt-callout

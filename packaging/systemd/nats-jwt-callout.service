@@ -28,9 +28,9 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
-# Config holds secrets; keep it read-only to the service.
-ReadOnlyPaths=/etc/nats-jwt-callout
-StateDirectory=nats-jwt-callout
+# Stateless network service: ProtectSystem=strict already makes the whole
+# filesystem (incl. /etc, which holds the secret-bearing config) read-only, and
+# the service writes nothing to disk — so no ReadWritePaths/StateDirectory.
 
 [Install]
 WantedBy=multi-user.target
