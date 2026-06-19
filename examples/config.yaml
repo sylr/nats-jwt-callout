@@ -1,3 +1,4 @@
+---
 # Example configuration for nats-jwt-callout.
 #
 # The nkeys below are REAL but are throwaway DEMO keys committed for a runnable
@@ -26,30 +27,30 @@ xkey_seed: "SXAJAC6N6ZSQWS4A5XMQ2WISAYSJ7FKO6XUSZ4TOXSI46NHXDBWBQO5YA4"
 
 # Audiences the token's "aud" must contain at least one of.
 audiences:
-  - "nats://callout-e2e"
+- "nats://callout-e2e"
 
 # Allowed JWT signing algorithms. AWS supports RS256 and ES384; GitHub uses RS256.
 signing_algs:
-  - "RS256"
+- "RS256"
 
 # Trusted OIDC issuers. The token "iss" must match one of these exactly; we never
 # perform discovery against an unlisted issuer. Bind each issuer to required
 # claim values (keys use the flattened namespace: "aws.aws_account",
 # "repository_owner", …).
 issuers:
-  # GitHub Actions — a real, ready-to-use issuer (the URL is fixed for all of
-  # GitHub). Owner-level binding only excludes other owners, so the policy must
-  # still pin the repository (see examples/policy.yaml).
-  - url: "https://token.actions.githubusercontent.com"
-    require_claims:
-      repository_owner: "sylr"
+# GitHub Actions — a real, ready-to-use issuer (the URL is fixed for all of
+# GitHub). Owner-level binding only excludes other owners, so the policy must
+# still pin the repository (see examples/policy.yaml).
+- url: "https://token.actions.githubusercontent.com"
+  require_claims:
+    repository_owner: "sylr"
 
-  # AWS STS outbound web identity federation — STUB. Replace the issuer URL with
-  # your account's value from `aws iam get-outbound-web-identity-federation-info`
-  # and set your 12-digit account id. Remove this block if you don't use AWS.
-  - url: "https://REPLACE-WITH-YOUR-ACCOUNT.tokens.sts.global.api.aws"
-    require_claims:
-      aws.aws_account: "000000000000"
+# AWS STS outbound web identity federation — STUB. Replace the issuer URL with
+# your account's value from `aws iam get-outbound-web-identity-federation-info`
+# and set your 12-digit account id. Remove this block if you don't use AWS.
+- url: "https://REPLACE-WITH-YOUR-ACCOUNT.tokens.sts.global.api.aws"
+  require_claims:
+    aws.aws_account: "000000000000"
 
 # Bound on OIDC discovery / JWKS HTTP calls.
 http_timeout: "10s"

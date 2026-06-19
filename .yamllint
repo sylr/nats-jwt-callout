@@ -15,10 +15,8 @@ rules:
       **/helm-values.yaml
   document-start:
     present: true
-    ignore: |
-      **/helm-values.yaml
+    ignore: ""
 ignore: |
-  **/helm-values.yaml
-  **/helm-values.yaml.age
-  **/templates/**/*.yaml
-  **/templates/**/*.yml
+  .git/
+  .venv/
+  dist/
