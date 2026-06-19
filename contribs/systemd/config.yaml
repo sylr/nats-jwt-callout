@@ -38,4 +38,10 @@ issuers:
 
 http_timeout: "10s"
 
+# Optional Prometheus metrics endpoint.
+metrics:
+  enabled: false
+  address: ":9090"
+  path: "/metrics"
+
 policy_file: "/etc/nats-jwt-callout/policy.yaml"

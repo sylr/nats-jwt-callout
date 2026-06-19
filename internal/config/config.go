@@ -41,10 +41,25 @@ type Config struct {
 	// HTTPTimeout bounds OIDC discovery and JWKS fetches.
 	HTTPTimeout time.Duration `yaml:"http_timeout"`
 
+	// Metrics configures the optional Prometheus metrics endpoint.
+	Metrics MetricsConfig `yaml:"metrics"`
+
 	// Policy is the authorization policy (loaded from PolicyFile if set,
 	// otherwise inline).
 	Policy     authz.Policy `yaml:"policy"`
 	PolicyFile string       `yaml:"policy_file"`
+}
+
+// MetricsConfig configures the optional Prometheus metrics HTTP endpoint.
+type MetricsConfig struct {
+	// Enabled turns the metrics endpoint on. When false, no metrics are
+	// collected or served.
+	Enabled bool `yaml:"enabled"`
+	// Address is the listen address for the endpoint (e.g. ":9090"). Defaults
+	// to DefaultMetricsAddress when enabled and unset.
+	Address string `yaml:"address"`
+	// Path is the HTTP path the metrics are served at. Defaults to "/metrics".
+	Path string `yaml:"path"`
 }
 
 // NATSConfig holds the callout service's own connection to NATS.
@@ -76,6 +91,10 @@ type IssuerConfig struct {
 // DefaultHTTPTimeout is used when HTTPTimeout is unset.
 const DefaultHTTPTimeout = 10 * time.Second
 
+// DefaultMetricsAddress is used when the metrics endpoint is enabled without an
+// explicit address.
+const DefaultMetricsAddress = ":9090"
+
 // Load reads and validates the configuration from a YAML file. If PolicyFile is
 // set, the policy is loaded from there and replaces any inline policy.
 func Load(path string) (*Config, error) {
@@ -98,6 +117,15 @@ func Load(path string) (*Config, error) {
 
 	if cfg.HTTPTimeout == 0 {
 		cfg.HTTPTimeout = DefaultHTTPTimeout
+	}
+
+	if cfg.Metrics.Enabled {
+		if cfg.Metrics.Address == "" {
+			cfg.Metrics.Address = DefaultMetricsAddress
+		}
+		if cfg.Metrics.Path == "" {
+			cfg.Metrics.Path = "/metrics"
+		}
 	}
 
 	if err := cfg.Validate(); err != nil {

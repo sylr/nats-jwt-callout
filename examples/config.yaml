@@ -55,5 +55,13 @@ issuers:
 # Bound on OIDC discovery / JWKS HTTP calls.
 http_timeout: "10s"
 
+# Optional Prometheus metrics endpoint. When enabled, exposes counters/histograms
+# (authorization_requests_total, authorization_denials_total,
+# authorization_duration_seconds) plus Go runtime/process metrics.
+metrics:
+  enabled: true
+  address: ":9090"
+  path: "/metrics"
+
 # Authorization policy: either inline (policy:) or a separate file (policy_file:).
 policy_file: "examples/policy.yaml"

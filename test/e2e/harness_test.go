@@ -18,6 +18,7 @@ import (
 
 	"github.com/sylr/nats-jwt-callout/internal/authz"
 	"github.com/sylr/nats-jwt-callout/internal/callout"
+	"github.com/sylr/nats-jwt-callout/internal/metrics"
 	"github.com/sylr/nats-jwt-callout/internal/mockoidc"
 	"github.com/sylr/nats-jwt-callout/internal/verifier"
 )
@@ -35,6 +36,7 @@ type harness struct {
 	idp     *mockoidc.Server
 	svc     *calloutlib.AuthorizationService
 	svcConn *nats.Conn
+	metrics *metrics.Metrics
 }
 
 // setup builds the full stack against a hermetic mock OIDC IdP.
@@ -131,7 +133,8 @@ authorization {
 		t.Fatalf("verifier.New: %v", err)
 	}
 
-	authorizer := callout.New(v, policy, accountKP, discardLogger())
+	m := metrics.New()
+	authorizer := callout.New(v, policy, accountKP, discardLogger(), m)
 
 	svcConn, err := nats.Connect(srv.ClientURL(), nats.UserInfo(authUser, authPassword))
 	if err != nil {
@@ -149,7 +152,7 @@ authorization {
 	}
 	t.Cleanup(func() { _ = svc.Stop() })
 
-	return &harness{srv: srv, svc: svc, svcConn: svcConn}
+	return &harness{srv: srv, svc: svc, svcConn: svcConn, metrics: m}
 }
 
 // appPolicy returns a policy granting the given ARN access to the APP account

@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,6 +26,7 @@ import (
 
 	authzcallout "github.com/sylr/nats-jwt-callout/internal/callout"
 	"github.com/sylr/nats-jwt-callout/internal/config"
+	"github.com/sylr/nats-jwt-callout/internal/metrics"
 	"github.com/sylr/nats-jwt-callout/internal/verifier"
 )
 
@@ -100,6 +102,22 @@ func run(logger *slog.Logger, configPath string) error {
 		return err
 	}
 
+	// Optional Prometheus metrics endpoint. Bind synchronously so a bad address
+	// fails startup, then serve in the background.
+	var m *metrics.Metrics
+	if cfg.Metrics.Enabled {
+		m = metrics.New()
+		ln, err := net.Listen("tcp", cfg.Metrics.Address)
+		if err != nil {
+			return fmt.Errorf("metrics listen on %q: %w", cfg.Metrics.Address, err)
+		}
+		go func() {
+			if err := m.Serve(ctx, ln, cfg.Metrics.Path, logger); err != nil {
+				logger.Error("metrics server error", "error", err)
+			}
+		}()
+	}
+
 	nc, err := connectNATS(cfg.NATS)
 	if err != nil {
 		return fmt.Errorf("connect to NATS: %w", err)
@@ -107,7 +125,7 @@ func run(logger *slog.Logger, configPath string) error {
 	defer nc.Close()
 	logger.Info("connected to NATS", "url", nc.ConnectedUrl())
 
-	authorizer := authzcallout.New(v, &cfg.Policy, signKey, logger)
+	authorizer := authzcallout.New(v, &cfg.Policy, signKey, logger, m)
 
 	opts := []callout.Option{
 		callout.Authorizer(authorizer.Authorize),

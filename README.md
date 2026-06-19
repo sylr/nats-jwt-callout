@@ -159,6 +159,27 @@ issuers:
 > `*_id` claims; the default `sub` shape also varies (branch/PR/environment/
 > custom/immutable subjects), so match on `repository` rather than `sub`.
 
+## Metrics
+
+An optional Prometheus endpoint is exposed when configured:
+
+```yaml
+metrics:
+  enabled: true
+  address: ":9090"      # default when enabled
+  path: "/metrics"       # default
+```
+
+It serves:
+
+- `nats_jwt_callout_authorization_requests_total{result="allowed|denied"}`
+- `nats_jwt_callout_authorization_denials_total{reason="no_token|verification_failed|policy_no_match|signing_failed"}`
+- `nats_jwt_callout_authorization_duration_seconds` (histogram)
+- standard Go runtime / process metrics.
+
+Disabled by default — no listener is opened and nothing is collected unless
+`metrics.enabled` is true.
+
 ## Security notes
 
 - The token is a **bearer credential** carried as the connection token. Run
