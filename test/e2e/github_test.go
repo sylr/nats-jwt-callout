@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -78,6 +79,34 @@ func TestGitHubActionsToken(t *testing.T) {
 			t.Fatal("expected rejection: audience not allowed")
 		}
 	})
+
+	// Same real token, gated by a CEL expression instead of the declarative
+	// claims matcher.
+	t.Run("authorized via CEL", func(t *testing.T) {
+		expr := fmt.Sprintf(`claims["repository"] == %q && claims["repository_owner"] == %q`, repo, owner)
+		h := setupWithIssuerAudience(t, celGithubPolicy(iss, expr), iss, ownerRequire, testAudience)
+		nc, err := h.connectClient(t, token)
+		if err != nil {
+			t.Fatalf("expected CEL-authorized connect: %v", err)
+		}
+		sub, err := nc.SubscribeSync("app.ghcel")
+		if err != nil {
+			t.Fatalf("subscribe: %v", err)
+		}
+		if err := nc.Publish("app.ghcel", []byte("ok")); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		_ = nc.Flush()
+		if _, err := sub.NextMsg(2 * time.Second); err != nil {
+			t.Fatalf("expected message within grant: %v", err)
+		}
+	})
+	t.Run("CEL deny on wrong repository", func(t *testing.T) {
+		h := setupWithIssuerAudience(t, celGithubPolicy(iss, `claims["repository"] == "someone/else"`), iss, ownerRequire, testAudience)
+		if _, err := h.connectClient(t, token); err == nil {
+			t.Fatal("expected CEL rejection: expression pins a different repository")
+		}
+	})
 }
 
 // githubPolicy grants a single repository (issuer-scoped) access to APP/app.>.
@@ -87,6 +116,23 @@ func githubPolicy(issuer, repo string) *authz.Policy {
 		Match: authz.Match{
 			Issuer: issuer,
 			Claims: map[string]string{"repository": repo},
+		},
+		Grant: authz.Grant{
+			Account:   "APP",
+			Publish:   authz.Permission{Allow: []string{"app.>"}},
+			Subscribe: authz.Permission{Allow: []string{"app.>", "_INBOX.>"}},
+		},
+	}}}
+}
+
+// celGithubPolicy grants APP/app.> when the (issuer-scoped) CEL expression holds.
+func celGithubPolicy(issuer, expr string) *authz.Policy {
+	return &authz.Policy{Rules: []authz.Rule{{
+		Name: "github-cel",
+		Match: authz.Match{
+			Issuer:     issuer,
+			Expr:       expr,
+			AllowBroad: true,
 		},
 		Grant: authz.Grant{
 			Account:   "APP",
