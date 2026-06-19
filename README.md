@@ -14,14 +14,20 @@ user JWT.
 
 ## How it works
 
-```
-                aws sts get-web-identity-token          $SYS.REQ.USER.AUTH
-   ┌────────┐   ───────────────────────────►  ┌────────┐ ──────────────►  ┌──────────────────┐
-   │ client │   connect: nats.Token(<JWT>)     │  NATS  │  AuthRequest     │ nats-jwt-callout │
-   │        │ ───────────────────────────────►│ server │ ◄──────────────  │  (this service)  │
-   └────────┘        signed user JWT           └────────┘  AuthResponse    └──────────────────┘
-                                                                                   │
-                                          verify OIDC (JWKS) ─► policy match ─► sign user JWT
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant P as OIDC provider<br/>(AWS STS / GitHub Actions)
+    participant S as NATS server
+    participant A as nats-jwt-callout
+
+    C->>P: request OIDC token (audience)
+    P-->>C: signed OIDC token
+    C->>S: CONNECT — nats.Token(<JWT>)
+    S->>A: AuthorizationRequest<br/>($SYS.REQ.USER.AUTH, xkey-encrypted)
+    Note over A: verify OIDC via JWKS →<br/>policy match → sign user JWT
+    A-->>S: AuthorizationResponse<br/>(signed user JWT)
+    S-->>C: authorized — bound to account + permissions
 ```
 
 1. The client obtains an OIDC token (e.g.
