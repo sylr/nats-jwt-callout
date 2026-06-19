@@ -6,26 +6,15 @@ repos:
   hooks:
   - id: codespell
     stages: [ pre-commit, commit-msg ]
-- repo: local
+- repo: https://github.com/golangci/golangci-lint
+  rev: c0d3ddc9cf3faa61a4e378e879ece580256d76e5 # frozen: v2.12.2
   hooks:
-  - id: golangci-lint
-    name: golangci-lint
-    description: Run golangci-lint once per Go module so multi-module linting resolves packages against the correct go.mod.
-    entry: just
-    args: [ golangci-lint-pre-commit, HEAD ]
-    types: [ go ]
-    language: system
-    require_serial: true
-    pass_filenames: false
   - id: golangci-lint-fmt
     stages: [ pre-commit ]
-    name: golangci-lint-fmt
-    description: Fast linters runner for Go. Formats all files in the repo.
-    entry: golangci-lint fmt
-    types: [go]
-    language: golang
-    require_serial: true
-    pass_filenames: false
+  - id: golangci-lint
+    stages: [ pre-commit ]
+- repo: local
+  hooks:
   - id: yamllint
     stages: [ pre-commit ]
     name: yamllint
