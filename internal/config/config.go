@@ -41,6 +41,13 @@ type Config struct {
 	// HTTPTimeout bounds OIDC discovery and JWKS fetches.
 	HTTPTimeout time.Duration `yaml:"http_timeout"`
 
+	// OIDCCACert is an optional path to a PEM CA bundle used to verify the TLS
+	// of OIDC discovery / JWKS endpoints. Needed for issuers with a private CA,
+	// e.g. an in-cluster Kubernetes API server
+	// (/var/run/secrets/kubernetes.io/serviceaccount/ca.crt). Empty uses the
+	// system roots.
+	OIDCCACert string `yaml:"oidc_ca_cert"`
+
 	// Metrics configures the optional Prometheus metrics endpoint.
 	Metrics MetricsConfig `yaml:"metrics"`
 

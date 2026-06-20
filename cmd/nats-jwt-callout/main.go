@@ -147,11 +147,25 @@ func buildVerifier(ctx context.Context, cfg *config.Config) (*verifier.Verifier,
 			RequireClaims: iss.RequireClaims,
 		})
 	}
+
+	var rootCAs *x509.CertPool
+	if cfg.OIDCCACert != "" {
+		pem, err := os.ReadFile(cfg.OIDCCACert)
+		if err != nil {
+			return nil, fmt.Errorf("read oidc_ca_cert: %w", err)
+		}
+		rootCAs = x509.NewCertPool()
+		if !rootCAs.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("no certificates found in oidc_ca_cert %q", cfg.OIDCCACert)
+		}
+	}
+
 	return verifier.New(ctx, verifier.Options{
 		Issuers:     issuers,
 		Audiences:   cfg.Audiences,
 		SigningAlgs: cfg.SigningAlgs,
 		HTTPTimeout: cfg.HTTPTimeout,
+		RootCAs:     rootCAs,
 	})
 }
 

@@ -13,6 +13,8 @@ package verifier
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -54,6 +56,10 @@ type Options struct {
 	SigningAlgs []string
 	// HTTPTimeout bounds OIDC discovery and JWKS fetches. Defaults to 10s.
 	HTTPTimeout time.Duration
+	// RootCAs, when non-nil, is the trust anchor for OIDC discovery / JWKS TLS
+	// (e.g. an in-cluster Kubernetes issuer signed by the cluster CA). Nil uses
+	// the system roots.
+	RootCAs *x509.CertPool
 }
 
 // IssuerOption configures one trusted issuer.
@@ -84,6 +90,12 @@ func New(ctx context.Context, opts Options) (*Verifier, error) {
 		timeout = 10 * time.Second
 	}
 	httpClient := &http.Client{Timeout: timeout}
+	if opts.RootCAs != nil {
+		httpClient.Transport = &http.Transport{
+			Proxy:           http.ProxyFromEnvironment,
+			TLSClientConfig: &tls.Config{RootCAs: opts.RootCAs, MinVersion: tls.VersionTLS12},
+		}
+	}
 	discoveryCtx := oidc.ClientContext(ctx, httpClient)
 
 	v := &Verifier{
