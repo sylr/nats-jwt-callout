@@ -25,6 +25,11 @@ jobs:
       with:
         extra_nix_config: |
           experimental-features = nix-command flakes
+    # Pull-only: adds the public cache as a substituter so the toolchain comes
+    # from Cachix instead of being rebuilt. No authToken → nothing is pushed.
+    - uses: cachix/cachix-action@v17
+      with:
+        name: nats-jwt-callout
 
     - name: Verify modules are tidy
       run: nix develop .#ci --command bash -c 'go mod tidy && git diff --exit-code -- go.mod go.sum'
@@ -55,6 +60,11 @@ jobs:
       with:
         extra_nix_config: |
           experimental-features = nix-command flakes
+    # Pull-only: adds the public cache as a substituter so the toolchain comes
+    # from Cachix instead of being rebuilt. No authToken → nothing is pushed.
+    - uses: cachix/cachix-action@v17
+      with:
+        name: nats-jwt-callout
 
     - name: GitHub OIDC end-to-end (embedded nats-server + callout + real token)
       run: nix develop .#ci --command go test -race -count=1 -v -run TestGitHubActionsToken ./test/e2e/...
@@ -67,6 +77,11 @@ jobs:
       with:
         extra_nix_config: |
           experimental-features = nix-command flakes
+    # Pull-only: adds the public cache as a substituter so the toolchain comes
+    # from Cachix instead of being rebuilt. No authToken → nothing is pushed.
+    - uses: cachix/cachix-action@v17
+      with:
+        name: nats-jwt-callout
 
     - name: goreleaser check
       run: nix develop .#ci --command goreleaser check
