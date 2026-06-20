@@ -85,3 +85,24 @@ jobs:
 
     - name: goreleaser check
       run: nix develop .#ci --command goreleaser check
+
+  k8s-e2e:
+    runs-on: ubuntu-latest
+    # Uses the Docker daemon preinstalled on the runner; kind and kubectl come
+    # from the Nix dev shell. run.sh creates a kind cluster, builds + loads the
+    # callout image, deploys NATS + callout, and asserts the projected
+    # service-account-token flow (allow nats-client / deny default SA).
+    steps:
+    - uses: actions/checkout@v7
+    - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+    # Pull-only: adds the public cache as a substituter so the toolchain comes
+    # from Cachix instead of being rebuilt. No authToken → nothing is pushed.
+    - uses: cachix/cachix-action@v17
+      with:
+        name: nats-jwt-callout
+
+    - name: Kubernetes service-account-token e2e (kind)
+      run: nix develop .#ci --command bash test/k8s/run.sh
