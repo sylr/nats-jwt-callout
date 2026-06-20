@@ -1,0 +1,72 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nats-callout
+  namespace: nats-callout-e2e
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-callout-config
+  namespace: nats-callout-e2e
+data:
+  config.yaml: |
+    nats:
+      url: "nats://nats:4222"
+      username: "auth"
+      password: "authpass"
+    issuer_account_seed: "SAAM7VLIAS7RMLKZENKSQKCTJ3SHWEHCSZ7VIBGAZMYXVYMHN2Z7LLZUCE"
+    xkey_seed: "SXAJAC6N6ZSQWS4A5XMQ2WISAYSJ7FKO6XUSZ4TOXSI46NHXDBWBQO5YA4"
+    audiences:
+    - "nats://callout"
+    signing_algs:
+    - "RS256"
+    issuers:
+    - url: "https://kubernetes.default.svc.cluster.local"
+      require_claims:
+        kubernetes.io.namespace: "nats-callout-e2e"
+    oidc_ca_cert: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    policy_file: "/etc/nats-jwt-callout/policy.yaml"
+  policy.yaml: |
+    rules:
+    - name: k8s-client
+      match:
+        issuer: "https://kubernetes.default.svc.cluster.local"
+        sub: "system:serviceaccount:nats-callout-e2e:nats-client"
+      grant:
+        account: APP
+        publish:
+          allow: ["app.>"]
+        subscribe:
+          allow: ["app.>", "_INBOX.>"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-callout
+  namespace: nats-callout-e2e
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats-callout
+  template:
+    metadata:
+      labels:
+        app: nats-callout
+    spec:
+      serviceAccountName: nats-callout
+      containers:
+      - name: callout
+        image: nats-jwt-callout:e2e
+        imagePullPolicy: IfNotPresent
+        args: ["-config", "/etc/nats-jwt-callout/config.yaml", "-log-level", "debug"]
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nats-jwt-callout
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: nats-callout-config

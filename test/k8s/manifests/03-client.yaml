@@ -1,0 +1,95 @@
+---
+# The identity the policy grants (see 02-callout.yaml rule "k8s-client"). Its
+# projected token is the NATS connection token the callout verifies.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nats-client
+  namespace: nats-callout-e2e
+---
+# Positive case: a pod running as nats-client presents a projected SA token
+# (audience nats://callout) as the NATS connection token. The callout verifies
+# it against the in-cluster OIDC issuer and mints an APP user that may publish
+# app.> — so the publish must succeed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nats-client-allow
+  namespace: nats-callout-e2e
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: nats-client-allow
+    spec:
+      serviceAccountName: nats-client
+      restartPolicy: Never
+      containers:
+      - name: client
+        image: natsio/nats-box:0.18.0
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -eu
+          TOKEN="$(cat /var/run/secrets/nats/token)"
+          echo "connecting as nats-client, publishing app.test ..."
+          nats pub --server nats://nats:4222 --token "$TOKEN" app.test "hello from k8s e2e"
+          echo "PUBLISH_OK"
+        volumeMounts:
+        - name: nats-token
+          mountPath: /var/run/secrets/nats
+          readOnly: true
+      volumes:
+      - name: nats-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              audience: nats://callout
+              expirationSeconds: 600
+---
+# Negative case: a pod running as the namespace's default SA. Its token verifies
+# (same issuer/audience/namespace), but no policy rule matches its subject, so
+# the callout denies the connection and the publish must fail. The job inverts
+# the exit code so "denied" is the success condition.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nats-client-deny
+  namespace: nats-callout-e2e
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: nats-client-deny
+    spec:
+      serviceAccountName: default
+      restartPolicy: Never
+      containers:
+      - name: client
+        image: natsio/nats-box:0.18.0
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -u
+          TOKEN="$(cat /var/run/secrets/nats/token)"
+          echo "connecting as default SA (expect denial), publishing app.test ..."
+          if nats pub --server nats://nats:4222 --token "$TOKEN" app.test "should not pass" 2>&1; then
+            echo "UNEXPECTED_ALLOW"
+            exit 1
+          fi
+          echo "DENIED_AS_EXPECTED"
+        volumeMounts:
+        - name: nats-token
+          mountPath: /var/run/secrets/nats
+          readOnly: true
+      volumes:
+      - name: nats-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              audience: nats://callout
+              expirationSeconds: 600

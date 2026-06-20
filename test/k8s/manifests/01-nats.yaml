@@ -1,0 +1,67 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-config
+  namespace: nats-callout-e2e
+data:
+  # auth_callout in server-config mode. issuer/xkey are the public keys whose
+  # seeds the callout holds (throwaway demo keys, also in examples/).
+  nats.conf: |
+    listen: 0.0.0.0:4222
+    accounts {
+      AUTH { users: [ { user: auth, password: authpass } ] }
+      APP {}
+      SYS {}
+    }
+    system_account: SYS
+    authorization {
+      auth_callout {
+        issuer: ABFROHTW52D2EITDLN7KEXKADF5U7PHE2LLWDYY345DHIZFTHYALVQQV
+        account: AUTH
+        auth_users: [ auth ]
+        xkey: XBOC65RS7VQW5XUKSMOI3PX23IJ3Z6K5V7ZBJCFATRSIRF3CIAOBIYB7
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: nats-callout-e2e
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+    spec:
+      containers:
+      - name: nats
+        image: nats:2.11
+        args: ["-c", "/etc/nats/nats.conf"]
+        ports:
+        - containerPort: 4222
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nats
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: nats-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: nats-callout-e2e
+spec:
+  selector:
+    app: nats
+  ports:
+  - port: 4222
+    targetPort: 4222
