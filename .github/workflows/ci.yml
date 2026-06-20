@@ -21,7 +21,10 @@ jobs:
     # in the dedicated github-oidc-e2e job below instead.
     steps:
     - uses: actions/checkout@v7
-    - uses: DeterminateSystems/nix-installer-action@v22
+    - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
 
     - name: Verify modules are tidy
       run: nix develop .#ci --command bash -c 'go mod tidy && git diff --exit-code -- go.mod go.sum'
@@ -48,7 +51,10 @@ jobs:
       id-token: write
     steps:
     - uses: actions/checkout@v7
-    - uses: DeterminateSystems/nix-installer-action@v22
+    - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
 
     - name: GitHub OIDC end-to-end (embedded nats-server + callout + real token)
       run: nix develop .#ci --command go test -race -count=1 -v -run TestGitHubActionsToken ./test/e2e/...
@@ -57,7 +63,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
-    - uses: DeterminateSystems/nix-installer-action@v22
+    - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
 
     - name: goreleaser check
       run: nix develop .#ci --command goreleaser check
