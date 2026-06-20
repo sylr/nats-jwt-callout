@@ -38,8 +38,14 @@ if ! kind get clusters 2>/dev/null | grep -qx "${CLUSTER}"; then
   kind create cluster --name "${CLUSTER}" --image "${NODE_IMAGE}" --wait 90s
 fi
 
-echo ">> building callout image ${IMG}"
-docker build -t "${IMG}" -f "${SCRIPT_DIR}/Dockerfile" "${REPO_ROOT}"
+# SKIP_BUILD=1 lets a caller (e.g. CI) build ${IMG} beforehand -- with a layer
+# cache -- and have this script just load the pre-built image.
+if [ "${SKIP_BUILD:-0}" = "1" ]; then
+  echo ">> skipping image build (SKIP_BUILD=1); using pre-built ${IMG}"
+else
+  echo ">> building callout image ${IMG}"
+  docker build -t "${IMG}" -f "${SCRIPT_DIR}/Dockerfile" "${REPO_ROOT}"
+fi
 
 echo ">> loading ${IMG} into kind"
 kind load docker-image "${IMG}" --name "${CLUSTER}"
