@@ -24,6 +24,18 @@
 // initial-connect resilience. Do not combine NATSOption with nats.Token or a
 // token in the URL: nats.go returns ErrTokenAlreadySet if both are set.
 //
+// # Caching
+//
+// Set Config.CachePath to reuse a minted token across separate processes — for
+// example successive `nats` CLI invocations, which would otherwise call STS on
+// every command. Token returns the cached token (audience permitting) as long
+// as it has not expired, calling STS synchronously only on a miss. When the
+// cached token is within Config.CacheRefreshBefore of expiry (default 10s),
+// Token still returns it but also mints a replacement in the background and
+// caches it for subsequent calls. Use DefaultCachePath for a per-audience
+// location under the user cache directory. The token is a credential: the cache
+// file is written atomically with 0600 permissions.
+//
 // # Versioning
 //
 // This is a nested Go module. External consumers import it as
@@ -34,8 +46,16 @@ package awsauth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +74,9 @@ const (
 	// DefaultFetchTimeout bounds a single token fetch performed by the
 	// nats.Option when NATSOption is called with a non-positive timeout.
 	DefaultFetchTimeout = 10 * time.Second
+	// DefaultCacheRefreshBefore is how close to expiry a cached token may be
+	// before Token refreshes it in the background (see Config.CacheRefreshBefore).
+	DefaultCacheRefreshBefore = 10 * time.Second
 )
 
 // STS GetWebIdentityToken accepts a requested lifetime in the 60s..3600s window.
@@ -92,6 +115,22 @@ type Config struct {
 	// Defaults to DefaultDuration (5m) when zero. When set it must be a whole
 	// number of seconds within the STS-allowed window (60s..3600s).
 	Duration time.Duration
+	// CachePath, when non-empty, enables on-disk caching of the minted token so
+	// that consecutive processes (e.g. successive CLI invocations) reuse it
+	// instead of calling STS each time. The token is read from and written to
+	// this file (created with 0600, parent directory with 0700, written
+	// atomically). A cached token (with a matching audience) is reused as long
+	// as it has not expired; only a missing, corrupt, expired, or wrong-audience
+	// cache forces a blocking mint. See DefaultCachePath for a per-audience
+	// location under the user cache dir.
+	CachePath string
+	// CacheRefreshBefore is how close to expiry a cached token may be before
+	// Token, having returned it, mints a replacement in the background and
+	// caches it for subsequent calls. Defaults to DefaultCacheRefreshBefore
+	// (10s). Ignored when CachePath is empty. Note that a process which exits
+	// immediately after Token may terminate before the background refresh
+	// completes; the next call then mints synchronously once the token expires.
+	CacheRefreshBefore time.Duration
 }
 
 func (cfg Config) validate() error {
@@ -114,18 +153,24 @@ func (cfg Config) validate() error {
 			return fmt.Errorf("awsauth: Duration must be a whole number of seconds, got %s", cfg.Duration)
 		}
 	}
+	if cfg.CacheRefreshBefore < 0 {
+		return fmt.Errorf("awsauth: CacheRefreshBefore must not be negative, got %s", cfg.CacheRefreshBefore)
+	}
 	return nil
 }
 
 // TokenSource mints AWS web identity tokens.
 type TokenSource struct {
-	client           stsAPI
-	audience         string
-	signingAlgorithm string
-	duration         time.Duration
+	client             stsAPI
+	audience           string
+	signingAlgorithm   string
+	duration           time.Duration
+	cachePath          string
+	cacheRefreshBefore time.Duration
 
-	mu      sync.Mutex
-	lastErr error
+	mu         sync.Mutex
+	lastErr    error
+	refreshing bool // a background cache refresh is in flight
 }
 
 // New loads the default AWS config and builds an STS-backed TokenSource.
@@ -171,16 +216,78 @@ func newWithClient(client stsAPI, cfg Config) (*TokenSource, error) {
 	if dur == 0 {
 		dur = DefaultDuration
 	}
+	refreshBefore := cfg.CacheRefreshBefore
+	if refreshBefore == 0 {
+		refreshBefore = DefaultCacheRefreshBefore
+	}
 	return &TokenSource{
-		client:           client,
-		audience:         cfg.Audience,
-		signingAlgorithm: alg,
-		duration:         dur,
+		client:             client,
+		audience:           cfg.Audience,
+		signingAlgorithm:   alg,
+		duration:           dur,
+		cachePath:          cfg.CachePath,
+		cacheRefreshBefore: refreshBefore,
 	}, nil
 }
 
-// Token mints a fresh web identity token.
+// Token returns a web identity token. When caching is enabled (Config.CachePath)
+// it returns the cached token as long as it has not expired; when that token is
+// within CacheRefreshBefore of expiry it also kicks off a background refresh so
+// later calls get a fresh token. On a cache miss (missing, corrupt, expired, or
+// wrong-audience) it mints synchronously and writes the cache (best effort — a
+// write failure does not fail the call). With caching disabled it always mints.
 func (ts *TokenSource) Token(ctx context.Context) (string, error) {
+	if ts.cachePath != "" {
+		if tok, exp, ok := ts.readCache(); ok {
+			if time.Until(exp) < ts.cacheRefreshBefore {
+				ts.refreshAsync()
+			}
+			return tok, nil
+		}
+	}
+	tok, err := ts.mint(ctx)
+	if err != nil {
+		return "", err
+	}
+	if ts.cachePath != "" {
+		ts.writeCache(tok)
+	}
+	return tok, nil
+}
+
+// refreshAsync mints a fresh token and writes it to the cache in the background,
+// for callers that returned a soon-to-expire cached token. At most one refresh
+// runs per TokenSource at a time; a mint failure is recorded via LastError.
+func (ts *TokenSource) refreshAsync() {
+	ts.mu.Lock()
+	if ts.refreshing {
+		ts.mu.Unlock()
+		return
+	}
+	ts.refreshing = true
+	ts.mu.Unlock()
+
+	go func() {
+		defer func() {
+			ts.mu.Lock()
+			ts.refreshing = false
+			ts.mu.Unlock()
+		}()
+		// The caller's context may already be cancelled by the time this runs,
+		// so use an independent, bounded context.
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultFetchTimeout)
+		defer cancel()
+		tok, err := ts.mint(ctx)
+		ts.setLastError(err)
+		if err != nil {
+			return
+		}
+		ts.writeCache(tok)
+	}()
+}
+
+// mint always calls STS for a fresh token, bypassing the cache.
+func (ts *TokenSource) mint(ctx context.Context) (string, error) {
 	alg := ts.signingAlgorithm
 	secs := int32(ts.duration / time.Second)
 	out, err := ts.client.GetWebIdentityToken(ctx, &sts.GetWebIdentityTokenInput{
@@ -195,6 +302,59 @@ func (ts *TokenSource) Token(ctx context.Context) (string, error) {
 		return "", errors.New("awsauth: STS returned an empty web identity token")
 	}
 	return *out.WebIdentityToken, nil
+}
+
+// readCache returns a cached token, and its expiry, if the file holds one whose
+// audience matches and which has not yet expired. Any problem (missing file,
+// unparseable token, wrong audience, already expired) is a miss, not an error —
+// the caller then mints a fresh token.
+func (ts *TokenSource) readCache() (token string, exp time.Time, ok bool) {
+	b, err := os.ReadFile(ts.cachePath)
+	if err != nil {
+		return "", time.Time{}, false
+	}
+	tok := strings.TrimSpace(string(b))
+	if tok == "" {
+		return "", time.Time{}, false
+	}
+	exp, auds, err := unverifiedExpiryAudience(tok)
+	if err != nil {
+		return "", time.Time{}, false
+	}
+	if !time.Now().Before(exp) { // expired
+		return "", time.Time{}, false
+	}
+	if !slices.Contains(auds, ts.audience) {
+		return "", time.Time{}, false
+	}
+	return tok, exp, true
+}
+
+// writeCache atomically stores tok at cachePath (0600 file, 0700 parent). It is
+// best effort: any error is ignored, since the token itself is already valid.
+func (ts *TokenSource) writeCache(tok string) {
+	dir := filepath.Dir(ts.cachePath)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(dir, ".awsauth-*.tmp")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeds
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	if _, err := tmp.WriteString(tok); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		return
+	}
+	_ = os.Rename(tmpName, ts.cachePath)
 }
 
 // NATSOption returns a nats.Option that mints a fresh token on every
@@ -221,8 +381,9 @@ func (ts *TokenSource) NATSOption(timeout time.Duration) nats.Option {
 	})
 }
 
-// LastError returns the most recent error from a NATSOption token fetch, or nil
-// if the last fetch succeeded (or none has run yet).
+// LastError returns the most recent error from a NATSOption token fetch or a
+// background cache refresh, or nil if the last such operation succeeded (or none
+// has run yet).
 func (ts *TokenSource) LastError() error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -233,4 +394,59 @@ func (ts *TokenSource) setLastError(err error) {
 	ts.mu.Lock()
 	ts.lastErr = err
 	ts.mu.Unlock()
+}
+
+// DefaultCachePath returns a per-audience cache file path under the user cache
+// directory (os.UserCacheDir), suitable for Config.CachePath. Distinct audiences
+// map to distinct files, so reusing it for several audiences will not collide.
+func DefaultCachePath(audience string) (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("awsauth: locate user cache dir: %w", err)
+	}
+	sum := sha256.Sum256([]byte(audience))
+	name := "awsauth-" + hex.EncodeToString(sum[:8]) + ".jwt"
+	return filepath.Join(dir, "nats-jwt-callout", name), nil
+}
+
+// unverifiedExpiryAudience decodes a JWT's payload (without verifying its
+// signature) to read its exp and aud claims. This is only used to judge cache
+// freshness locally; the callout still verifies the token's signature server
+// side. aud is accepted as either a string or an array of strings per RFC 7519.
+func unverifiedExpiryAudience(token string) (exp time.Time, auds []string, err error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return time.Time{}, nil, errors.New("malformed JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return time.Time{}, nil, fmt.Errorf("decode JWT payload: %w", err)
+	}
+	var claims struct {
+		Exp int64           `json:"exp"`
+		Aud json.RawMessage `json:"aud"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return time.Time{}, nil, fmt.Errorf("parse JWT claims: %w", err)
+	}
+	if claims.Exp == 0 {
+		return time.Time{}, nil, errors.New("JWT has no exp claim")
+	}
+	return time.Unix(claims.Exp, 0), parseAudience(claims.Aud), nil
+}
+
+// parseAudience reads a JWT aud claim, which may be a single string or an array.
+func parseAudience(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var one string
+	if json.Unmarshal(raw, &one) == nil {
+		return []string{one}
+	}
+	var many []string
+	if json.Unmarshal(raw, &many) == nil {
+		return many
+	}
+	return nil
 }

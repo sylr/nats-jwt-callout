@@ -2,7 +2,11 @@ package awsauth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -21,11 +25,13 @@ type fakeSTS struct {
 	in    *sts.GetWebIdentityTokenInput
 	token string
 	err   error
+	calls int
 }
 
 func (f *fakeSTS) GetWebIdentityToken(ctx context.Context, in *sts.GetWebIdentityTokenInput, _ ...func(*sts.Options)) (*sts.GetWebIdentityTokenOutput, error) {
 	f.mu.Lock()
 	f.in = in
+	f.calls++
 	tok, fakeErr := f.token, f.err
 	f.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -41,6 +47,21 @@ func (f *fakeSTS) lastInput() *sts.GetWebIdentityTokenInput {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.in
+}
+
+func (f *fakeSTS) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// fakeJWT builds an unsigned JWT carrying the given exp and aud, enough for the
+// cache's local freshness/audience checks (the signature is never verified here).
+func fakeJWT(exp time.Time, aud string) string {
+	enc := base64.RawURLEncoding.EncodeToString
+	header := enc([]byte(`{"alg":"RS256","typ":"JWT"}`))
+	payload := enc(fmt.Appendf(nil, `{"exp":%d,"aud":[%q]}`, exp.Unix(), aud))
+	return header + "." + payload + "." + enc([]byte("sig"))
 }
 
 func TestConfigValidate(t *testing.T) {
@@ -61,6 +82,8 @@ func TestConfigValidate(t *testing.T) {
 		{"duration sub-second", Config{Audience: "aud", Duration: 1500 * time.Millisecond}, true},
 		{"signing alg ES384", Config{Audience: "aud", SigningAlgorithm: "ES384"}, false},
 		{"signing alg unsupported", Config{Audience: "aud", SigningAlgorithm: "HS256"}, true},
+		{"cache refresh before negative", Config{Audience: "aud", CacheRefreshBefore: -time.Second}, true},
+		{"cache config valid", Config{Audience: "aud", CachePath: "/tmp/x", CacheRefreshBefore: time.Minute}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -207,6 +230,183 @@ func TestNATSOptionRecordsError(t *testing.T) {
 	}
 	if ts.LastError() == nil {
 		t.Error("LastError = nil, want non-nil after failed fetch")
+	}
+}
+
+func TestCacheDisabledAlwaysMints(t *testing.T) {
+	f := &fakeSTS{token: "tok"}
+	ts := mustSource(t, f, Config{Audience: "aud"}) // no CachePath
+	for range 3 {
+		if _, err := ts.Token(context.Background()); err != nil {
+			t.Fatalf("Token: %v", err)
+		}
+	}
+	if got := f.callCount(); got != 3 {
+		t.Errorf("STS calls = %d, want 3 (caching disabled)", got)
+	}
+}
+
+func TestCacheHitAcrossSources(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tok.jwt")
+	token := fakeJWT(time.Now().Add(5*time.Minute), "aud")
+
+	// First source mints once and writes the cache.
+	f1 := &fakeSTS{token: token}
+	ts1 := mustSource(t, f1, Config{Audience: "aud", CachePath: path})
+	if _, err := ts1.Token(context.Background()); err != nil {
+		t.Fatalf("first Token: %v", err)
+	}
+	if f1.callCount() != 1 {
+		t.Fatalf("first source STS calls = %d, want 1", f1.callCount())
+	}
+
+	// A fresh source (new process) reading the same cache must not call STS.
+	f2 := &fakeSTS{token: token}
+	ts2 := mustSource(t, f2, Config{Audience: "aud", CachePath: path})
+	got, err := ts2.Token(context.Background())
+	if err != nil {
+		t.Fatalf("second Token: %v", err)
+	}
+	if got != token {
+		t.Errorf("cached token = %q, want %q", got, token)
+	}
+	if f2.callCount() != 0 {
+		t.Errorf("second source STS calls = %d, want 0 (cache hit)", f2.callCount())
+	}
+}
+
+func TestCacheExpiredReMints(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tok.jwt")
+	// An already-expired cached token is a miss → blocking mint.
+	if err := os.WriteFile(path, []byte(fakeJWT(time.Now().Add(-time.Second), "aud")), 0o600); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	fresh := fakeJWT(time.Now().Add(5*time.Minute), "aud")
+	f := &fakeSTS{token: fresh}
+	ts := mustSource(t, f, Config{Audience: "aud", CachePath: path})
+
+	got, err := ts.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if got != fresh {
+		t.Errorf("token = %q, want freshly minted %q", got, fresh)
+	}
+	if f.callCount() != 1 {
+		t.Errorf("STS calls = %d, want 1 (cached token expired)", f.callCount())
+	}
+}
+
+// TestCacheNearExpiryBackgroundRefresh: a non-expired token within
+// CacheRefreshBefore of expiry is returned immediately, and a background refresh
+// then replaces it in the cache for subsequent calls.
+func TestCacheNearExpiryBackgroundRefresh(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tok.jwt")
+	stale := fakeJWT(time.Now().Add(5*time.Second), "aud") // valid, but < default 10s
+	if err := os.WriteFile(path, []byte(stale), 0o600); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	fresh := fakeJWT(time.Now().Add(5*time.Minute), "aud")
+	f := &fakeSTS{token: fresh}
+	ts := mustSource(t, f, Config{Audience: "aud", CachePath: path})
+
+	// The call returns the still-valid stale token without blocking on STS.
+	got, err := ts.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if got != stale {
+		t.Errorf("returned token = %q, want the still-valid cached %q", got, stale)
+	}
+
+	// The background refresh then mints once and rewrites the cache with fresh.
+	if !eventually(2*time.Second, func() bool {
+		b, err := os.ReadFile(path)
+		return err == nil && strings.TrimSpace(string(b)) == fresh
+	}) {
+		t.Fatalf("cache not refreshed in background; STS calls=%d", f.callCount())
+	}
+	if got := f.callCount(); got != 1 {
+		t.Errorf("STS calls = %d, want 1 (single background refresh)", got)
+	}
+}
+
+func eventually(timeout time.Duration, cond func() bool) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return cond()
+}
+
+func TestCacheAudienceMismatchReMints(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tok.jwt")
+	if err := os.WriteFile(path, []byte(fakeJWT(time.Now().Add(5*time.Minute), "other")), 0o600); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	f := &fakeSTS{token: fakeJWT(time.Now().Add(5*time.Minute), "aud")}
+	ts := mustSource(t, f, Config{Audience: "aud", CachePath: path})
+
+	if _, err := ts.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if f.callCount() != 1 {
+		t.Errorf("STS calls = %d, want 1 (cached token has wrong audience)", f.callCount())
+	}
+}
+
+func TestCacheCorruptFileReMints(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tok.jwt")
+	if err := os.WriteFile(path, []byte("not-a-jwt"), 0o600); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	f := &fakeSTS{token: fakeJWT(time.Now().Add(5*time.Minute), "aud")}
+	ts := mustSource(t, f, Config{Audience: "aud", CachePath: path})
+
+	if _, err := ts.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if f.callCount() != 1 {
+		t.Errorf("STS calls = %d, want 1 (corrupt cache ignored)", f.callCount())
+	}
+}
+
+func TestCacheWritesFileWith0600(t *testing.T) {
+	// Cache path in a not-yet-existing nested dir: writeCache must create it.
+	path := filepath.Join(t.TempDir(), "nested", "dir", "tok.jwt")
+	f := &fakeSTS{token: fakeJWT(time.Now().Add(5*time.Minute), "aud")}
+	ts := mustSource(t, f, Config{Audience: "aud", CachePath: path})
+
+	if _, err := ts.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("cache file not written: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("cache file perms = %o, want 600", perm)
+	}
+}
+
+func TestDefaultCachePathPerAudience(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // os.UserCacheDir honours this on Linux
+	a, err := DefaultCachePath("nats://one")
+	if err != nil {
+		t.Fatalf("DefaultCachePath: %v", err)
+	}
+	b, err := DefaultCachePath("nats://two")
+	if err != nil {
+		t.Fatalf("DefaultCachePath: %v", err)
+	}
+	if a == b {
+		t.Errorf("distinct audiences mapped to the same path %q", a)
+	}
+	if !strings.HasSuffix(a, ".jwt") {
+		t.Errorf("path %q does not end in .jwt", a)
 	}
 }
 
