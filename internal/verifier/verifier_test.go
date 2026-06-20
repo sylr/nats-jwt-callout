@@ -209,6 +209,56 @@ func TestVerifyRejectsEmptyAndMalformed(t *testing.T) {
 	}
 }
 
+func TestVerifyKubernetesShapedToken(t *testing.T) {
+	idp := mockoidc.New(t)
+	v, err := verifier.New(context.Background(), verifier.Options{
+		Issuers: []verifier.IssuerOption{{
+			URL:           idp.Issuer(),
+			RequireClaims: map[string]string{"kubernetes.io.namespace": "myns"},
+		}},
+		Audiences:   []string{testAudience},
+		SigningAlgs: []string{oidc.RS256},
+		HTTPTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("verifier.New: %v", err)
+	}
+
+	tok := idp.Mint(t, mockoidc.TokenOptions{
+		Subject:  "system:serviceaccount:myns:myapp",
+		Audience: []string{testAudience},
+		ExtraClaims: map[string]any{
+			"kubernetes.io": map[string]any{
+				"namespace":      "myns",
+				"serviceaccount": map[string]any{"name": "myapp", "uid": "abc-123"},
+			},
+		},
+	})
+	id, err := v.Verify(context.Background(), tok)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if id.Subject != "system:serviceaccount:myns:myapp" {
+		t.Errorf("sub = %q", id.Subject)
+	}
+	if ns, _ := id.Claim("kubernetes.io.namespace"); ns != "myns" {
+		t.Errorf("kubernetes.io.namespace = %q", ns)
+	}
+	if sa, _ := id.Claim("kubernetes.io.serviceaccount.name"); sa != "myapp" {
+		t.Errorf("kubernetes.io.serviceaccount.name = %q", sa)
+	}
+
+	// require_claims binding: a token from another namespace is rejected.
+	other := idp.Mint(t, mockoidc.TokenOptions{
+		Subject:     "system:serviceaccount:other:x",
+		Audience:    []string{testAudience},
+		ExtraClaims: map[string]any{"kubernetes.io": map[string]any{"namespace": "other"}},
+	})
+	if _, err := v.Verify(context.Background(), other); err == nil {
+		t.Fatal("expected rejection: namespace require_claims mismatch")
+	}
+}
+
 func TestNewFailsOnUnreachableIssuer(t *testing.T) {
 	_, err := verifier.New(context.Background(), verifier.Options{
 		Issuers:     []verifier.IssuerOption{{URL: "http://127.0.0.1:1/unreachable"}},

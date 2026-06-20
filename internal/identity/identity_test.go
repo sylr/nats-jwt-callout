@@ -105,3 +105,26 @@ func TestNewAndClaim(t *testing.T) {
 		t.Error("missing claim should not be present")
 	}
 }
+
+func TestParseKubernetesNestedClaims(t *testing.T) {
+	// A bound/projected k8s service-account token nests claims under the
+	// "kubernetes.io" key; they must flatten with dotted paths.
+	payload := []byte(`{
+		"iss": "https://k8s.example.com",
+		"sub": "system:serviceaccount:myns:myapp",
+		"aud": ["nats://callout"],
+		"kubernetes.io": {
+			"namespace": "myns",
+			"serviceaccount": {"name": "myapp", "uid": "abc-123"},
+			"pod": {"name": "myapp-0"}
+		}
+	}`)
+	id, err := Parse(payload)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	mustClaim(t, id, "kubernetes.io.namespace", "myns")
+	mustClaim(t, id, "kubernetes.io.serviceaccount.name", "myapp")
+	mustClaim(t, id, "kubernetes.io.serviceaccount.uid", "abc-123")
+	mustClaim(t, id, "kubernetes.io.pod.name", "myapp-0")
+}

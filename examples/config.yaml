@@ -52,6 +52,15 @@ issuers:
   require_claims:
     aws.aws_account: "000000000000"
 
+# Kubernetes service account tokens — a bound/projected SA token is an OIDC JWT.
+# Set the URL to your cluster's issuer (managed clusters publish a public one;
+# `kubectl get --raw /.well-known/openid-configuration` shows it). Pods must
+# request a projected token whose audience matches `audiences` above. Nested
+# claims flatten with dots, e.g. kubernetes.io.namespace.
+- url: "https://REPLACE-WITH-YOUR-CLUSTER-OIDC-ISSUER"
+  require_claims:
+    kubernetes.io.namespace: "myteam"
+
 # Bound on OIDC discovery / JWKS HTTP calls.
 http_timeout: "10s"
 

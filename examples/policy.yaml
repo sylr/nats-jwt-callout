@@ -52,6 +52,20 @@ rules:
       ttl: "1m"
     max_expiry: "1h"
 
+# Kubernetes: a specific service account. The exact sub is a strong identity pin,
+# so no allow_broad is needed. (Nested claims also work, e.g.
+# claims: { kubernetes.io.serviceaccount.name: myapp }.)
+- name: k8s-app
+  match:
+    issuer: "https://REPLACE-WITH-YOUR-CLUSTER-OIDC-ISSUER"
+    sub: "system:serviceaccount:myteam:myapp"
+  grant:
+    account: APP
+    publish:
+      allow: ["app.>"]
+    subscribe:
+      allow: ["app.>", "_INBOX.>"]
+
 # Advanced: a CEL expression for dynamic conditions (here: any branch ref in the
 # org). Variables: sub, iss, aud, claims, exp, now. Requires allow_broad: true.
 - name: github-branches-cel
