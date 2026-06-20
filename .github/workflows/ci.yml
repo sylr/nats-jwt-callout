@@ -50,9 +50,9 @@ jobs:
           ${{ steps.go-cache.outputs.gocache }}
           ${{ steps.go-cache.outputs.gomodcache }}
           ~/.cache/golangci-lint
-        key: ${{ runner.os }}-go-test-${{ hashFiles('go.mod', 'go.sum') }}
+        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', 'go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-test-
+          ${{ runner.os }}-go-
 
     - name: Verify modules are tidy
       run: nix develop .#ci-test --command bash -c 'go mod tidy && git diff --exit-code -- go.mod go.sum'
@@ -100,12 +100,15 @@ jobs:
         } >> "$GITHUB_OUTPUT"
     - uses: actions/cache@v4
       with:
+        # Same path list and key as the test job so the two jobs share one Go
+        # cache (golangci-lint dir included only for parity; unused here).
         path: |
           ${{ steps.go-cache.outputs.gocache }}
           ${{ steps.go-cache.outputs.gomodcache }}
-        key: ${{ runner.os }}-go-oidc-${{ hashFiles('go.mod', 'go.sum') }}
+          ~/.cache/golangci-lint
+        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', 'go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-oidc-
+          ${{ runner.os }}-go-
 
     - name: GitHub OIDC end-to-end (embedded nats-server + callout + real token)
       run: nix develop .#ci-github-oidc-e2e --command go test -race -count=1 -v -run TestGitHubActionsToken ./test/e2e/...
