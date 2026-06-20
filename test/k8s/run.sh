@@ -21,6 +21,7 @@ CLUSTER="${CLUSTER:-nats-callout-e2e}"
 # healthy. Override with NODE_IMAGE= if a newer default works for you.
 NODE_IMAGE="${NODE_IMAGE:-kindest/node:v1.34.0}"
 IMG="${IMG:-nats-jwt-callout:e2e}"
+CLIENT_IMG="${CLIENT_IMG:-nats-jwt-callout-k8s-client:e2e}"
 CTX="kind-${CLUSTER}"
 NS="nats-callout-e2e"
 
@@ -41,14 +42,16 @@ fi
 # SKIP_BUILD=1 lets a caller (e.g. CI) build ${IMG} beforehand -- with a layer
 # cache -- and have this script just load the pre-built image.
 if [ "${SKIP_BUILD:-0}" = "1" ]; then
-  echo ">> skipping image build (SKIP_BUILD=1); using pre-built ${IMG}"
+  echo ">> skipping image build (SKIP_BUILD=1); using pre-built ${IMG} and ${CLIENT_IMG}"
 else
   echo ">> building callout image ${IMG}"
   docker build -t "${IMG}" -f "${SCRIPT_DIR}/Dockerfile" "${REPO_ROOT}"
+  echo ">> building client image ${CLIENT_IMG}"
+  docker build -t "${CLIENT_IMG}" -f "${SCRIPT_DIR}/client.Dockerfile" "${REPO_ROOT}"
 fi
 
-echo ">> loading ${IMG} into kind"
-kind load docker-image "${IMG}" --name "${CLUSTER}"
+echo ">> loading images into kind"
+kind load docker-image "${IMG}" "${CLIENT_IMG}" --name "${CLUSTER}"
 
 echo ">> applying manifests"
 k apply -f "${MANIFESTS}/00-setup.yaml" \

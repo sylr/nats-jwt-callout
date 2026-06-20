@@ -27,15 +27,11 @@ spec:
       restartPolicy: Never
       containers:
       - name: client
-        image: natsio/nats-box:0.18.0
-        command: ["/bin/sh", "-c"]
-        args:
-        - |
-          set -eu
-          TOKEN="$(cat /var/run/secrets/nats/token)"
-          echo "connecting as nats-client, publishing app.test ..."
-          nats pub --server nats://nats:4222 --token "$TOKEN" app.test "hello from k8s e2e"
-          echo "PUBLISH_OK"
+        image: nats-jwt-callout-k8s-client:e2e
+        imagePullPolicy: IfNotPresent
+        # Go client (test/k8s/client) reading its projected token via lib/k8sauth.
+        # -expect allow: a successful publish is the pass condition.
+        args: ["-expect", "allow", "-token-path", "/var/run/secrets/nats/token"]
         volumeMounts:
         - name: nats-token
           mountPath: /var/run/secrets/nats
@@ -69,18 +65,12 @@ spec:
       restartPolicy: Never
       containers:
       - name: client
-        image: natsio/nats-box:0.18.0
-        command: ["/bin/sh", "-c"]
-        args:
-        - |
-          set -u
-          TOKEN="$(cat /var/run/secrets/nats/token)"
-          echo "connecting as default SA (expect denial), publishing app.test ..."
-          if nats pub --server nats://nats:4222 --token "$TOKEN" app.test "should not pass" 2>&1; then
-            echo "UNEXPECTED_ALLOW"
-            exit 1
-          fi
-          echo "DENIED_AS_EXPECTED"
+        image: nats-jwt-callout-k8s-client:e2e
+        imagePullPolicy: IfNotPresent
+        # Same Go client; -expect deny inverts the outcome: the token verifies
+        # (same issuer/audience/namespace) but no policy rule matches the default
+        # SA's subject, so the connection must be denied for the job to succeed.
+        args: ["-expect", "deny", "-token-path", "/var/run/secrets/nats/token"]
         volumeMounts:
         - name: nats-token
           mountPath: /var/run/secrets/nats

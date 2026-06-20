@@ -11,11 +11,14 @@ require (
 	github.com/nats-io/nkeys v0.4.16
 	github.com/prometheus/client_golang v1.23.2
 	github.com/sylr/nats-jwt-callout/lib/awsauth v0.0.0
+	github.com/sylr/nats-jwt-callout/lib/k8sauth v0.0.0
 	github.com/synadia-io/callout.go v0.2.3
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 replace github.com/sylr/nats-jwt-callout/lib/awsauth => ./lib/awsauth
+
+replace github.com/sylr/nats-jwt-callout/lib/k8sauth => ./lib/k8sauth
 
 require (
 	cel.dev/expr v0.25.1 // indirect
