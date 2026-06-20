@@ -54,29 +54,42 @@ jobs:
           ${{ steps.go-cache.outputs.gocache }}
           ${{ steps.go-cache.outputs.gomodcache }}
           ~/.cache/golangci-lint
-        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', 'go.sum', 'lib/awsauth/go.mod', 'lib/awsauth/go.sum', 'go.work', 'go.work.sum') }}
+        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', 'go.sum', 'lib/awsauth/go.mod', 'lib/awsauth/go.sum', 'lib/k8sauth/go.mod', 'lib/k8sauth/go.sum', 'go.work', 'go.work.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
 
     # GOWORK=off on the root checks proves go.mod's require+replace are
     # self-sufficient and not silently propped up by the committed go.work. The
-    # nested lib/awsauth module is a separate module: `./...` stops at its go.mod,
-    # so it needs its own dedicated steps (also GOWORK=off for determinism).
+    # nested lib/* modules are separate modules: `./...` stops at their go.mod,
+    # so each needs its own dedicated run (also GOWORK=off for determinism).
     - name: Verify modules are tidy
       run: |
         nix develop .#ci-test --command bash -c '
-          GOWORK=off go mod tidy &&
-          (cd lib/awsauth && GOWORK=off go mod tidy) &&
-          git diff --exit-code -- go.mod go.sum lib/awsauth/go.mod lib/awsauth/go.sum'
+          set -e
+          GOWORK=off go mod tidy
+          for m in lib/awsauth lib/k8sauth; do (cd "$m" && GOWORK=off go mod tidy); done
+          git diff --exit-code -- go.mod go.sum lib/awsauth/go.mod lib/awsauth/go.sum lib/k8sauth/go.mod lib/k8sauth/go.sum'
 
     - name: Vet
-      run: nix develop .#ci-test --command bash -c 'GOWORK=off go vet ./... && (cd lib/awsauth && GOWORK=off go vet ./...)'
+      run: |
+        nix develop .#ci-test --command bash -c '
+          set -e
+          GOWORK=off go vet ./...
+          for m in lib/awsauth lib/k8sauth; do (cd "$m" && GOWORK=off go vet ./...); done'
 
     - name: golangci-lint
-      run: nix develop .#ci-test --command bash -c 'GOWORK=off golangci-lint run ./... && (cd lib/awsauth && GOWORK=off golangci-lint run ./...)'
+      run: |
+        nix develop .#ci-test --command bash -c '
+          set -e
+          GOWORK=off golangci-lint run ./...
+          for m in lib/awsauth lib/k8sauth; do (cd "$m" && GOWORK=off golangci-lint run ./...); done'
 
     - name: Test (race + hermetic e2e)
-      run: nix develop .#ci-test --command bash -c 'GOWORK=off go test -race -count=1 ./... && (cd lib/awsauth && GOWORK=off go test -race -count=1 ./...)'
+      run: |
+        nix develop .#ci-test --command bash -c '
+          set -e
+          GOWORK=off go test -race -count=1 ./...
+          for m in lib/awsauth lib/k8sauth; do (cd "$m" && GOWORK=off go test -race -count=1 ./...); done'
 
     - name: Build (all tags compile)
       run: nix develop .#ci-test --command bash -c 'GOWORK=off go build ./... && GOWORK=off go vet -tags e2e_aws ./test/e2e/...'
@@ -127,7 +140,7 @@ jobs:
           ${{ steps.go-cache.outputs.gocache }}
           ${{ steps.go-cache.outputs.gomodcache }}
           ~/.cache/golangci-lint
-        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', 'go.sum', 'lib/awsauth/go.mod', 'lib/awsauth/go.sum', 'go.work', 'go.work.sum') }}
+        key: ${{ runner.os }}-go-${{ hashFiles('go.mod', 'go.sum', 'lib/awsauth/go.mod', 'lib/awsauth/go.sum', 'lib/k8sauth/go.mod', 'lib/k8sauth/go.sum', 'go.work', 'go.work.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
 

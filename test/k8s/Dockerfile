@@ -10,11 +10,12 @@
 FROM golang:1.26 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
-# The root module replaces lib/awsauth with the in-tree nested module, so its
-# go.mod must be present for `go mod download` to read the build list (the full
-# source arrives with COPY . . below). GOWORK=off keeps this in plain module
-# mode; go.work is not copied at this layer anyway.
+# The root module replaces the in-tree nested modules, so their go.mod files
+# must be present for `go mod download` to read the build list (the full source
+# arrives with COPY . . below). GOWORK=off keeps this in plain module mode;
+# go.work is not copied at this layer anyway.
 COPY lib/awsauth/go.mod lib/awsauth/go.sum lib/awsauth/
+COPY lib/k8sauth/go.mod lib/k8sauth/go.sum lib/k8sauth/
 RUN --mount=type=cache,target=/go/pkg/mod \
     GOWORK=off go mod download
 COPY . .
