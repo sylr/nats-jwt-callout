@@ -107,6 +107,11 @@
             # Docker comes from the runner; kind/kubectl from Nix.
             packages = [ pkgs.kind pkgs.kubectl ];
           };
+          ci-release = pkgs.mkShell {
+            # goreleaser builds the Go binaries (go) and the SBOMs (syft).
+            # buildx/qemu/docker for the container images come from the runner.
+            packages = [ pkgs.go_1_26 pkgs.goreleaser pkgs.syft ];
+          };
         }
       );
     };
