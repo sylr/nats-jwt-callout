@@ -32,6 +32,28 @@ jobs:
       with:
         name: nats-jwt-callout
 
+    # Go build/module cache (there is no setup-go to provide one). Probe the
+    # paths with GOTOOLCHAIN=local so this step does not fetch the go.mod
+    # toolchain before the cache is restored. GOMODCACHE also holds the
+    # downloaded toolchain, and go.mod (which pins the go version) keys it.
+    - name: Go cache paths
+      id: go-cache
+      run: |
+        out=$(nix develop .#ci-test --command bash -c 'GOTOOLCHAIN=local go env GOCACHE GOMODCACHE')
+        {
+          echo "gocache=$(printf '%s\n' "$out" | sed -n 1p)"
+          echo "gomodcache=$(printf '%s\n' "$out" | sed -n 2p)"
+        } >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ${{ steps.go-cache.outputs.gocache }}
+          ${{ steps.go-cache.outputs.gomodcache }}
+          ~/.cache/golangci-lint
+        key: ${{ runner.os }}-go-test-${{ hashFiles('go.mod', 'go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-test-
+
     - name: Verify modules are tidy
       run: nix develop .#ci-test --command bash -c 'go mod tidy && git diff --exit-code -- go.mod go.sum'
 
@@ -66,6 +88,24 @@ jobs:
     - uses: cachix/cachix-action@v17
       with:
         name: nats-jwt-callout
+
+    # Go build/module cache (see the test job for why GOTOOLCHAIN=local).
+    - name: Go cache paths
+      id: go-cache
+      run: |
+        out=$(nix develop .#ci-github-oidc-e2e --command bash -c 'GOTOOLCHAIN=local go env GOCACHE GOMODCACHE')
+        {
+          echo "gocache=$(printf '%s\n' "$out" | sed -n 1p)"
+          echo "gomodcache=$(printf '%s\n' "$out" | sed -n 2p)"
+        } >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ${{ steps.go-cache.outputs.gocache }}
+          ${{ steps.go-cache.outputs.gomodcache }}
+        key: ${{ runner.os }}-go-oidc-${{ hashFiles('go.mod', 'go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-oidc-
 
     - name: GitHub OIDC end-to-end (embedded nats-server + callout + real token)
       run: nix develop .#ci-github-oidc-e2e --command go test -race -count=1 -v -run TestGitHubActionsToken ./test/e2e/...
