@@ -81,15 +81,22 @@ checksum:
 sboms:
 - artifacts: archive
 
-dockers:
+dockers_v2:
 - id: nats-jwt-callout
-  image_templates:
-  - "ghcr.io/sylr/nats-jwt-callout:{{ .Version }}"
+  ids:
+  - nats-jwt-callout
+  images:
+  - "ghcr.io/sylr/nats-jwt-callout"
+  tags:
+  - "{{ .Version }}"
+  platforms:
+  - linux/amd64
+  - linux/arm64
   dockerfile: Dockerfile
-  build_flag_templates:
-  - "--label=org.opencontainers.image.source=https://github.com/sylr/nats-jwt-callout"
-  - "--label=org.opencontainers.image.version={{ .Version }}"
-  - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+  labels:
+    org.opencontainers.image.source: "https://github.com/sylr/nats-jwt-callout"
+    org.opencontainers.image.version: "{{ .Version }}"
+    org.opencontainers.image.revision: "{{ .FullCommit }}"
 
 changelog:
   sort: asc
