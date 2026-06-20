@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sylr/nats-jwt-callout/internal/identity"
+	"github.com/sylr/nats-oidc-callout/internal/identity"
 )
 
 // key is a single RSA signing key with a stable kid.

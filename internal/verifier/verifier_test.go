@@ -7,8 +7,8 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 
-	"github.com/sylr/nats-jwt-callout/internal/mockoidc"
-	"github.com/sylr/nats-jwt-callout/internal/verifier"
+	"github.com/sylr/nats-oidc-callout/internal/mockoidc"
+	"github.com/sylr/nats-oidc-callout/internal/verifier"
 )
 
 const (
@@ -79,10 +79,10 @@ func TestVerifyGitHubShapedToken(t *testing.T) {
 		t.Fatalf("verifier.New: %v", err)
 	}
 	tok := idp.Mint(t, mockoidc.TokenOptions{
-		Subject:  "repo:sylr/nats-jwt-callout:ref:refs/heads/main",
+		Subject:  "repo:sylr/nats-oidc-callout:ref:refs/heads/main",
 		Audience: []string{testAudience},
 		ExtraClaims: map[string]any{
-			"repository":       "sylr/nats-jwt-callout",
+			"repository":       "sylr/nats-oidc-callout",
 			"repository_owner": "sylr",
 			"repository_id":    123456789,
 			"ref":              "refs/heads/main",
@@ -92,7 +92,7 @@ func TestVerifyGitHubShapedToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	if repo, _ := id.Claim("repository"); repo != "sylr/nats-jwt-callout" {
+	if repo, _ := id.Claim("repository"); repo != "sylr/nats-oidc-callout" {
 		t.Errorf("repository = %q", repo)
 	}
 	if rid, _ := id.Claim("repository_id"); rid != "123456789" {

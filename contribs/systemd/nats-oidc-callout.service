@@ -1,15 +1,15 @@
 [Unit]
 Description=NATS auth callout service (OIDC token authentication)
-Documentation=https://github.com/sylr/nats-jwt-callout
+Documentation=https://github.com/sylr/nats-oidc-callout
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=nats-jwt-callout
-Group=nats-jwt-callout
-ExecStart=/usr/bin/nats-jwt-callout -config /etc/nats-jwt-callout/config.yaml
-# `systemctl reload nats-jwt-callout` hot-reloads the policy and issuers (SIGHUP).
+User=nats-oidc-callout
+Group=nats-oidc-callout
+ExecStart=/usr/bin/nats-oidc-callout -config /etc/nats-oidc-callout/config.yaml
+# `systemctl reload nats-oidc-callout` hot-reloads the policy and issuers (SIGHUP).
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s

@@ -15,7 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const namespace = "nats_jwt_callout"
+const namespace = "nats_oidc_callout"
 
 // Denial reasons — low-cardinality label values for authorization_denials_total.
 const (

@@ -1,5 +1,5 @@
 {
-  description = "A Nix-flake-based for nats-jwt-callout";
+  description = "A Nix-flake-based for nats-oidc-callout";
 
   inputs = {
     nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.2605";

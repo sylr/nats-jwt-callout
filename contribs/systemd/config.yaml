@@ -1,15 +1,15 @@
 ---
-# nats-jwt-callout system configuration (installed to /etc/nats-jwt-callout/).
+# nats-oidc-callout system configuration (installed to /etc/nats-oidc-callout/).
 #
 # This is a TEMPLATE — the service will not start until you replace the
 # REPLACE_ME values. Generate keys with the `nk` tool (see the project README)
-# and keep the seeds readable only by the nats-jwt-callout user.
+# and keep the seeds readable only by the nats-oidc-callout user.
 
 nats:
   url: "tls://127.0.0.1:4222"
   username: "auth"
   password: "REPLACE_ME"
-  # ca_cert: "/etc/nats-jwt-callout/ca.pem"
+  # ca_cert: "/etc/nats-oidc-callout/ca.pem"
 
 # Account nkey seed (SA…); its public key must equal auth_callout.issuer on the
 # NATS server.
@@ -44,4 +44,4 @@ metrics:
   address: ":9090"
   path: "/metrics"
 
-policy_file: "/etc/nats-jwt-callout/policy.yaml"
+policy_file: "/etc/nats-oidc-callout/policy.yaml"

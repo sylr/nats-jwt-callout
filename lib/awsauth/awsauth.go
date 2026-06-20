@@ -39,7 +39,7 @@
 // # Versioning
 //
 // This is a nested Go module. External consumers import it as
-// github.com/sylr/nats-jwt-callout/lib/awsauth and version it with
+// github.com/sylr/nats-oidc-callout/lib/awsauth and version it with
 // subdirectory-prefixed tags (e.g. lib/awsauth/vX.Y.Z), independent of the
 // repository's root tags.
 package awsauth
@@ -406,7 +406,7 @@ func DefaultCachePath(audience string) (string, error) {
 	}
 	sum := sha256.Sum256([]byte(audience))
 	name := "awsauth-" + hex.EncodeToString(sum[:8]) + ".jwt"
-	return filepath.Join(dir, "nats-jwt-callout", name), nil
+	return filepath.Join(dir, "nats-oidc-callout", name), nil
 }
 
 // unverifiedExpiryAudience decodes a JWT's payload (without verifying its

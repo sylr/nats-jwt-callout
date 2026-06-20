@@ -1,5 +1,5 @@
 [project]
-name = "nats-jwt-callout"
+name = "nats-oidc-callout"
 version = "0.1.0"
 description = "NATS auth callout service authenticating clients via OIDC tokens (AWS, GitHub Actions)."
 requires-python = ">=3.13"

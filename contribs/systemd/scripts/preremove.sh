@@ -6,6 +6,6 @@ set -e
 
 if [ "$1" = "remove" ] || [ "$1" = "0" ]; then
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl disable --now nats-jwt-callout >/dev/null 2>&1 || true
+        systemctl disable --now nats-oidc-callout >/dev/null 2>&1 || true
     fi
 fi

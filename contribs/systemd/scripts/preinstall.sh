@@ -4,14 +4,14 @@
 # applies cleanly.
 set -e
 
-if ! getent group nats-jwt-callout >/dev/null 2>&1; then
-    groupadd --system nats-jwt-callout
+if ! getent group nats-oidc-callout >/dev/null 2>&1; then
+    groupadd --system nats-oidc-callout
 fi
 
-if ! getent passwd nats-jwt-callout >/dev/null 2>&1; then
-    useradd --system --gid nats-jwt-callout \
+if ! getent passwd nats-oidc-callout >/dev/null 2>&1; then
+    useradd --system --gid nats-oidc-callout \
         --home-dir /nonexistent --no-create-home \
         --shell /usr/sbin/nologin \
         --comment "NATS auth callout service" \
-        nats-jwt-callout
+        nats-oidc-callout
 fi

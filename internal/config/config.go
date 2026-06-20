@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/sylr/nats-jwt-callout/internal/authz"
+	"github.com/sylr/nats-oidc-callout/internal/authz"
 )
 
 // Config is the top-level service configuration, loaded from a YAML file and

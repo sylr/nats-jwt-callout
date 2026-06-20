@@ -1,5 +1,5 @@
 /dist/
-/nats-jwt-callout
+/nats-oidc-callout
 *.out
 *.test
 .DS_Store

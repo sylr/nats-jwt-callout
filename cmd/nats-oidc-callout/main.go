@@ -1,4 +1,4 @@
-// Command nats-jwt-callout is a NATS auth callout service that authenticates
+// Command nats-oidc-callout is a NATS auth callout service that authenticates
 // clients using AWS Web Identity Tokens (from the STS GetWebIdentityToken API).
 //
 // The client passes its AWS web identity token as the NATS connection token. The
@@ -24,10 +24,10 @@ import (
 	"github.com/nats-io/nkeys"
 	callout "github.com/synadia-io/callout.go"
 
-	authzcallout "github.com/sylr/nats-jwt-callout/internal/callout"
-	"github.com/sylr/nats-jwt-callout/internal/config"
-	"github.com/sylr/nats-jwt-callout/internal/metrics"
-	"github.com/sylr/nats-jwt-callout/internal/verifier"
+	authzcallout "github.com/sylr/nats-oidc-callout/internal/callout"
+	"github.com/sylr/nats-oidc-callout/internal/config"
+	"github.com/sylr/nats-oidc-callout/internal/metrics"
+	"github.com/sylr/nats-oidc-callout/internal/verifier"
 )
 
 // Build metadata, injected by goreleaser via -ldflags.
@@ -44,7 +44,7 @@ func main() {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Printf("nats-jwt-callout %s (commit %s, built %s)\n", version, commit, date)
+		fmt.Printf("nats-oidc-callout %s (commit %s, built %s)\n", version, commit, date)
 		return
 	}
 
@@ -220,7 +220,7 @@ func warnUnreloadable(oldCfg, newCfg *config.Config, logger *slog.Logger) {
 
 func connectNATS(cfg config.NATSConfig) (*nats.Conn, error) {
 	opts := []nats.Option{
-		nats.Name("nats-jwt-callout"),
+		nats.Name("nats-oidc-callout"),
 	}
 	switch {
 	case cfg.Credentials != "":

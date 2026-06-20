@@ -43,9 +43,9 @@ func TestParseAWSNamespacedClaimsArePrefixed(t *testing.T) {
 func TestParseGitHubClaimsAreTopLevel(t *testing.T) {
 	payload := []byte(`{
 		"iss": "https://token.actions.githubusercontent.com",
-		"sub": "repo:sylr/nats-jwt-callout:ref:refs/heads/main",
+		"sub": "repo:sylr/nats-oidc-callout:ref:refs/heads/main",
 		"aud": "nats://ci",
-		"repository": "sylr/nats-jwt-callout",
+		"repository": "sylr/nats-oidc-callout",
 		"repository_owner": "sylr",
 		"repository_id": 123456789,
 		"ref": "refs/heads/main",
@@ -55,7 +55,7 @@ func TestParseGitHubClaimsAreTopLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	mustClaim(t, id, "repository", "sylr/nats-jwt-callout")
+	mustClaim(t, id, "repository", "sylr/nats-oidc-callout")
 	mustClaim(t, id, "repository_owner", "sylr")
 	mustClaim(t, id, "ref", "refs/heads/main")
 	// Numeric claim is stringified exactly (no float64 .0 / precision drift).

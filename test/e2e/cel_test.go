@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sylr/nats-jwt-callout/internal/authz"
-	"github.com/sylr/nats-jwt-callout/internal/mockoidc"
+	"github.com/sylr/nats-oidc-callout/internal/authz"
+	"github.com/sylr/nats-oidc-callout/internal/mockoidc"
 )
 
 // celAppPolicy grants APP access only when a CEL expression over the verified

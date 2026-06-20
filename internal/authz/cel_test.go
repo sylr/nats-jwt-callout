@@ -3,7 +3,7 @@ package authz
 import (
 	"testing"
 
-	"github.com/sylr/nats-jwt-callout/internal/identity"
+	"github.com/sylr/nats-oidc-callout/internal/identity"
 )
 
 func celRule(expr string, allowBroad bool) *Policy {
@@ -51,7 +51,7 @@ func TestCELAndedWithClaims(t *testing.T) {
 	p := &Policy{Rules: []Rule{{
 		Name: "cel",
 		Match: Match{
-			Claims:     map[string]string{"repository": "sylr/nats-jwt-callout"},
+			Claims:     map[string]string{"repository": "sylr/nats-oidc-callout"},
 			Expr:       `claims["ref"].startsWith("refs/heads/")`,
 			AllowBroad: true,
 		},
@@ -59,12 +59,12 @@ func TestCELAndedWithClaims(t *testing.T) {
 	}}}
 	mustValidate(t, p)
 
-	match := id("s", map[string]string{"repository": "sylr/nats-jwt-callout", "ref": "refs/heads/main"})
+	match := id("s", map[string]string{"repository": "sylr/nats-oidc-callout", "ref": "refs/heads/main"})
 	if _, err := p.Evaluate(match); err != nil {
 		t.Errorf("expected match: %v", err)
 	}
 	// Claims match but expr fails (a tag, not a branch).
-	tag := id("s", map[string]string{"repository": "sylr/nats-jwt-callout", "ref": "refs/tags/v1"})
+	tag := id("s", map[string]string{"repository": "sylr/nats-oidc-callout", "ref": "refs/tags/v1"})
 	if _, err := p.Evaluate(tag); err == nil {
 		t.Error("expected no match: ref is not a branch")
 	}

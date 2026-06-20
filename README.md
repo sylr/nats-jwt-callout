@@ -1,4 +1,4 @@
-# nats-jwt-callout
+# nats-oidc-callout
 
 A [NATS auth callout](https://docs.nats.io/running-a-nats-service/configuration/securing_nats/auth_callout)
 service that authenticates NATS clients using **OIDC tokens** from any trusted
@@ -19,7 +19,7 @@ sequenceDiagram
     participant C as Client
     participant P as OIDC provider<br/>(AWS STS / GitHub Actions)
     participant S as NATS server
-    participant A as nats-jwt-callout
+    participant A as nats-oidc-callout
 
     C->>P: request OIDC token (audience)
     P-->>C: signed OIDC token
@@ -49,18 +49,18 @@ sequenceDiagram
 ## Build / install
 
 ```sh
-go build ./cmd/nats-jwt-callout
-# or download a release archive / container image (ghcr.io/sylr/nats-jwt-callout)
+go build ./cmd/nats-oidc-callout
+# or download a release archive / container image (ghcr.io/sylr/nats-oidc-callout)
 ```
 
 **Packages (deb/rpm).** Releases also ship `.deb` and `.rpm` packages that install
-the binary to `/usr/bin`, a **systemd unit** to `/usr/lib/systemd/system/nats-jwt-callout.service`,
-and config templates to `/etc/nats-jwt-callout/{config,policy}.yaml` (preserved on
-upgrade). They create a `nats-jwt-callout` system user; the service is **not**
+the binary to `/usr/bin`, a **systemd unit** to `/usr/lib/systemd/system/nats-oidc-callout.service`,
+and config templates to `/etc/nats-oidc-callout/{config,policy}.yaml` (preserved on
+upgrade). They create a `nats-oidc-callout` system user; the service is **not**
 auto-started — edit the config first, then:
 
 ```sh
-sudo systemctl enable --now nats-jwt-callout
+sudo systemctl enable --now nats-oidc-callout
 ```
 
 ## Configure
@@ -97,7 +97,7 @@ Rules are evaluated in order; the first match wins; no match denies.
 Run:
 
 ```sh
-nats-jwt-callout -config examples/config.yaml
+nats-oidc-callout -config examples/config.yaml
 ```
 
 ## AWS setup (real tokens)
@@ -159,6 +159,86 @@ issuers:
 > `*_id` claims; the default `sub` shape also varies (branch/PR/environment/
 > custom/immutable subjects), so match on `repository` rather than `sub`.
 
+## Client libraries
+
+Two small, dependency-light Go helpers package the client side — obtaining a
+token for the right identity and handing it to the NATS Go SDK. Each is a
+**separate nested module** (so importing one pulls only its own dependencies,
+not the callout server's), versioned with subdirectory-prefixed tags
+(`lib/awsauth/vX.Y.Z`, `lib/k8sauth/vX.Y.Z`):
+
+| Module | Token source | Depends on |
+| --- | --- | --- |
+| [`lib/awsauth`](lib/awsauth) | STS `GetWebIdentityToken` (mints on demand) | `aws-sdk-go-v2` (config + sts), `nats.go` |
+| [`lib/k8sauth`](lib/k8sauth) | projected service-account token file (kubelet-rotated) | `nats.go` only |
+
+Both expose the same shape: `Token(ctx) (string, error)` for the raw token, and
+`NATSOption(...)` returning a `nats.Option`. The option uses
+[`nats.TokenHandler`](https://pkg.go.dev/github.com/nats-io/nats.go#TokenHandler),
+so a **fresh token is supplied on every (re)connect** — which is the only refresh
+path, since the callout runs solely at CONNECT and the user JWT it issues is
+capped to the token's expiry (see [How it works](#how-it-works)). Keep
+reconnection enabled (the nats.go default) for long-lived connections; a failed
+fetch is recorded on `LastError()`.
+
+### `lib/awsauth`
+
+```go
+import (
+	"github.com/nats-io/nats.go"
+	"github.com/sylr/nats-oidc-callout/lib/awsauth"
+)
+
+// Audience must match the callout's audience allowlist; a region must resolve
+// (GetWebIdentityToken is not on the STS global endpoint). Optional CachePath
+// reuses the token across separate processes — e.g. successive `nats` CLI runs.
+cachePath, _ := awsauth.DefaultCachePath("nats://my-app")
+ts, err := awsauth.New(ctx, awsauth.Config{Audience: "nats://my-app", CachePath: cachePath})
+if err != nil { /* ... */ }
+
+// One-shot — e.g. feed `nats --token`:
+token, err := ts.Token(ctx)
+
+// Long-lived connection that re-mints on reconnect:
+nc, err := nats.Connect(url, ts.NATSOption(10*time.Second))
+```
+
+With `CachePath` set, `Token` reuses the cached token while it is unverified
+(its `exp`/`aud` are read locally; the callout still verifies the signature) and
+not expired; within `CacheRefreshBefore` of expiry (default 10s) it returns the
+cached token and mints a replacement in the background. `NewFromAWSConfig` takes
+a pre-built `aws.Config` for custom region/profile/credentials.
+
+### `lib/k8sauth`
+
+In-pod, project a token whose **audience matches the callout** (the default SA
+token's audience is the API server, so point `TokenPath` at a projected one):
+
+```yaml
+volumes:
+- name: nats-token
+  projected:
+    sources:
+    - serviceAccountToken:
+        path: token
+        audience: nats://my-app
+        expirationSeconds: 600
+```
+
+```go
+import (
+	"github.com/nats-io/nats.go"
+	"github.com/sylr/nats-oidc-callout/lib/k8sauth"
+)
+
+ts, err := k8sauth.New(k8sauth.Config{TokenPath: "/var/run/secrets/nats/token"})
+if err != nil { /* ... */ }
+nc, err := nats.Connect(url, ts.NATSOption())
+```
+
+`NATSOption` re-reads the file on each (re)connect, so it picks up the token the
+kubelet rotates in place. `test/k8s/client` is a runnable example.
+
 ## Configuration reload
 
 Send **`SIGHUP`** to reload the config file without dropping the NATS connection
@@ -166,7 +246,7 @@ or restarting the callout service:
 
 ```sh
 kill -HUP <pid>                          # or, with the systemd unit:
-sudo systemctl reload nats-jwt-callout
+sudo systemctl reload nats-oidc-callout
 ```
 
 Reload is **best-effort and atomic**: the config is re-read, the verifier (OIDC
@@ -216,9 +296,9 @@ metrics:
 
 It serves:
 
-- `nats_jwt_callout_authorization_requests_total{result="allowed|denied"}`
-- `nats_jwt_callout_authorization_denials_total{reason="no_token|verification_failed|policy_no_match|signing_failed"}`
-- `nats_jwt_callout_authorization_duration_seconds` (histogram)
+- `nats_oidc_callout_authorization_requests_total{result="allowed|denied"}`
+- `nats_oidc_callout_authorization_denials_total{reason="no_token|verification_failed|policy_no_match|signing_failed"}`
+- `nats_oidc_callout_authorization_duration_seconds` (histogram)
 - standard Go runtime / process metrics.
 
 Disabled by default — no listener is opened and nothing is collected unless

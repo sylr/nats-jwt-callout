@@ -27,7 +27,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: client
-        image: nats-jwt-callout-k8s-client:e2e
+        image: nats-oidc-callout-k8s-client:e2e
         imagePullPolicy: IfNotPresent
         # Go client (test/k8s/client) reading its projected token via lib/k8sauth.
         # -expect allow: a successful publish is the pass condition.
@@ -65,7 +65,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: client
-        image: nats-jwt-callout-k8s-client:e2e
+        image: nats-oidc-callout-k8s-client:e2e
         imagePullPolicy: IfNotPresent
         # Same Go client; -expect deny inverts the outcome: the token verifies
         # (same issuer/audience/namespace) but no policy rule matches the default

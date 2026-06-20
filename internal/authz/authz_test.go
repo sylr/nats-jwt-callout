@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sylr/nats-jwt-callout/internal/identity"
+	"github.com/sylr/nats-oidc-callout/internal/identity"
 )
 
 func mustValidate(t *testing.T, p *Policy) {
@@ -99,13 +99,13 @@ func TestGitHubRepositoryPinIsNotBroad(t *testing.T) {
 	p := &Policy{Rules: []Rule{{
 		Match: Match{
 			Issuer: "https://token.actions.githubusercontent.com",
-			Claims: map[string]string{"repository": "sylr/nats-jwt-callout"},
+			Claims: map[string]string{"repository": "sylr/nats-oidc-callout"},
 		},
 		Grant: Grant{Account: "APP"},
 	}}}
 	mustValidate(t, p)
-	ok := id("repo:sylr/nats-jwt-callout:ref:refs/heads/main",
-		map[string]string{"repository": "sylr/nats-jwt-callout", "repository_owner": "sylr"})
+	ok := id("repo:sylr/nats-oidc-callout:ref:refs/heads/main",
+		map[string]string{"repository": "sylr/nats-oidc-callout", "repository_owner": "sylr"})
 	ok.Issuer = "https://token.actions.githubusercontent.com"
 	if _, err := p.Evaluate(ok); err != nil {
 		t.Errorf("expected match: %v", err)
@@ -153,23 +153,23 @@ func TestIssuerScoping(t *testing.T) {
 
 func TestFullAnchorGlob(t *testing.T) {
 	p := &Policy{Rules: []Rule{{
-		Match: Match{Sub: "repo:sylr/nats-jwt-callout", Claims: map[string]string{"repository": "sylr/nats-jwt-callout"}},
+		Match: Match{Sub: "repo:sylr/nats-oidc-callout", Claims: map[string]string{"repository": "sylr/nats-oidc-callout"}},
 		Grant: Grant{Account: "APP"},
 	}}}
 	mustValidate(t, p)
 	// Must not match a superstring.
-	if _, err := p.Evaluate(id("repo:sylr/nats-jwt-callout-evil", map[string]string{"repository": "sylr/nats-jwt-callout"})); err == nil {
+	if _, err := p.Evaluate(id("repo:sylr/nats-oidc-callout-evil", map[string]string{"repository": "sylr/nats-oidc-callout"})); err == nil {
 		t.Error("exact sub must not match a superstring")
 	}
 }
 
 func TestFullAnchorRegex(t *testing.T) {
 	p := &Policy{Rules: []Rule{{
-		Match: Match{Sub: `re:^repo:sylr/(nats-jwt-callout)$`, Claims: map[string]string{"repository": "sylr/nats-jwt-callout"}},
+		Match: Match{Sub: `re:^repo:sylr/(nats-oidc-callout)$`, Claims: map[string]string{"repository": "sylr/nats-oidc-callout"}},
 		Grant: Grant{Account: "APP"},
 	}}}
 	mustValidate(t, p)
-	if _, err := p.Evaluate(id("repo:sylr/nats-jwt-callout-evil", map[string]string{"repository": "sylr/nats-jwt-callout"})); err == nil {
+	if _, err := p.Evaluate(id("repo:sylr/nats-oidc-callout-evil", map[string]string{"repository": "sylr/nats-oidc-callout"})); err == nil {
 		t.Error("anchored regex must not match a superstring")
 	}
 }

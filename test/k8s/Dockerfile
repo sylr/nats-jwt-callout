@@ -21,8 +21,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    GOWORK=off CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/nats-jwt-callout ./cmd/nats-jwt-callout
+    GOWORK=off CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/nats-oidc-callout ./cmd/nats-oidc-callout
 
 FROM gcr.io/distroless/static:nonroot
-COPY --from=build /out/nats-jwt-callout /usr/bin/nats-jwt-callout
-ENTRYPOINT ["/usr/bin/nats-jwt-callout"]
+COPY --from=build /out/nats-oidc-callout /usr/bin/nats-oidc-callout
+ENTRYPOINT ["/usr/bin/nats-oidc-callout"]

@@ -1,5 +1,5 @@
 ---
-# Example configuration for nats-jwt-callout.
+# Example configuration for nats-oidc-callout.
 #
 # The nkeys below are REAL but are throwaway DEMO keys committed for a runnable
 # example — never reuse them in production. Generate your own account + curve

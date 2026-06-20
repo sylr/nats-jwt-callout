@@ -43,7 +43,7 @@ wheels = [
 ]
 
 [[package]]
-name = "nats-jwt-callout"
+name = "nats-oidc-callout"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

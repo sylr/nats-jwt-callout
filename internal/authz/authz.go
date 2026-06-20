@@ -16,7 +16,7 @@ import (
 	"github.com/nats-io/jwt/v2"
 	"gopkg.in/yaml.v3"
 
-	"github.com/sylr/nats-jwt-callout/internal/identity"
+	"github.com/sylr/nats-oidc-callout/internal/identity"
 )
 
 // Policy is an ordered list of authorization rules.

@@ -43,7 +43,7 @@
 // # Versioning
 //
 // This is a nested Go module. External consumers import it as
-// github.com/sylr/nats-jwt-callout/lib/k8sauth and version it with
+// github.com/sylr/nats-oidc-callout/lib/k8sauth and version it with
 // subdirectory-prefixed tags (e.g. lib/k8sauth/vX.Y.Z), independent of the
 // repository's root tags.
 package k8sauth

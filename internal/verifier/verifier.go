@@ -25,7 +25,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 
-	"github.com/sylr/nats-jwt-callout/internal/identity"
+	"github.com/sylr/nats-oidc-callout/internal/identity"
 )
 
 // ErrUntrustedIssuer is returned when a token's issuer is not in the configured

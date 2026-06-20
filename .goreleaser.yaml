@@ -1,16 +1,16 @@
 ---
 version: 2
 
-project_name: nats-jwt-callout
+project_name: nats-oidc-callout
 
 before:
   hooks:
   - go mod tidy
 
 builds:
-- id: nats-jwt-callout
-  main: ./cmd/nats-jwt-callout
-  binary: nats-jwt-callout
+- id: nats-oidc-callout
+  main: ./cmd/nats-oidc-callout
+  binary: nats-oidc-callout
   env:
   - CGO_ENABLED=0
   flags:
@@ -43,14 +43,14 @@ archives:
 
 nfpms:
 - id: packages
-  package_name: nats-jwt-callout
+  package_name: nats-oidc-callout
   # v-prefixed like the archives, but without the OS (deb/rpm are Linux-only).
   # Only the artifact file name carries the "v"; the internal deb/rpm version
   # stays bare so dpkg/rpm compare it correctly.
   file_name_template: >-
     {{ .ProjectName }}_v{{ .Version }}_{{ .Arch }}
   vendor: "Sylvain Rabot"
-  homepage: "https://github.com/sylr/nats-jwt-callout"
+  homepage: "https://github.com/sylr/nats-oidc-callout"
   maintainer: "Sylvain Rabot <sylvaint@abstraction.fr>"
   description: "NATS auth callout service authenticating clients via OIDC tokens (AWS, GitHub Actions)."
   formats:
@@ -58,22 +58,22 @@ nfpms:
   - rpm
   bindir: /usr/bin
   contents:
-  - src: ./contribs/systemd/nats-jwt-callout.service
-    dst: /usr/lib/systemd/system/nats-jwt-callout.service
+  - src: ./contribs/systemd/nats-oidc-callout.service
+    dst: /usr/lib/systemd/system/nats-oidc-callout.service
   - src: ./contribs/systemd/config.yaml
-    dst: /etc/nats-jwt-callout/config.yaml
+    dst: /etc/nats-oidc-callout/config.yaml
     type: "config|noreplace"
     file_info:
       mode: 0640
-      owner: nats-jwt-callout
-      group: nats-jwt-callout
+      owner: nats-oidc-callout
+      group: nats-oidc-callout
   - src: ./examples/policy.yaml
-    dst: /etc/nats-jwt-callout/policy.yaml
+    dst: /etc/nats-oidc-callout/policy.yaml
     type: "config|noreplace"
     file_info:
       mode: 0640
-      owner: nats-jwt-callout
-      group: nats-jwt-callout
+      owner: nats-oidc-callout
+      group: nats-oidc-callout
   scripts:
     preinstall: ./contribs/systemd/scripts/preinstall.sh
     postinstall: ./contribs/systemd/scripts/postinstall.sh
@@ -87,11 +87,11 @@ sboms:
 - artifacts: archive
 
 dockers_v2:
-- id: nats-jwt-callout
+- id: nats-oidc-callout
   ids:
-  - nats-jwt-callout
+  - nats-oidc-callout
   images:
-  - "ghcr.io/sylr/nats-jwt-callout"
+  - "ghcr.io/sylr/nats-oidc-callout"
   tags:
   - "v{{ .Version }}"
   platforms:
@@ -99,7 +99,7 @@ dockers_v2:
   - linux/arm64
   dockerfile: Dockerfile
   labels:
-    org.opencontainers.image.source: "https://github.com/sylr/nats-jwt-callout"
+    org.opencontainers.image.source: "https://github.com/sylr/nats-oidc-callout"
     org.opencontainers.image.version: "v{{ .Version }}"
     org.opencontainers.image.revision: "{{ .FullCommit }}"
 

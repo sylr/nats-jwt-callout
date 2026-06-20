@@ -20,8 +20,8 @@ CLUSTER="${CLUSTER:-nats-callout-e2e}"
 # ships a broken arm64 variant ("exec format error"). v1.34.0 is multi-arch and
 # healthy. Override with NODE_IMAGE= if a newer default works for you.
 NODE_IMAGE="${NODE_IMAGE:-kindest/node:v1.34.0}"
-IMG="${IMG:-nats-jwt-callout:e2e}"
-CLIENT_IMG="${CLIENT_IMG:-nats-jwt-callout-k8s-client:e2e}"
+IMG="${IMG:-nats-oidc-callout:e2e}"
+CLIENT_IMG="${CLIENT_IMG:-nats-oidc-callout-k8s-client:e2e}"
 CTX="kind-${CLUSTER}"
 NS="nats-callout-e2e"
 

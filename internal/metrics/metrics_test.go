@@ -53,9 +53,9 @@ func TestHandlerExposesMetrics(t *testing.T) {
 
 	body := scrape(t, m.Handler())
 	for _, want := range []string{
-		"nats_jwt_callout_authorization_requests_total",
-		"nats_jwt_callout_authorization_duration_seconds",
-		`nats_jwt_callout_authorization_requests_total{result="allowed"} 1`,
+		"nats_oidc_callout_authorization_requests_total",
+		"nats_oidc_callout_authorization_duration_seconds",
+		`nats_oidc_callout_authorization_requests_total{result="allowed"} 1`,
 		"go_goroutines", // standard Go collector is registered
 	} {
 		if !strings.Contains(body, want) {
@@ -84,7 +84,7 @@ func TestServeAndShutdown(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
-	if !strings.Contains(string(b), "nats_jwt_callout_authorization_requests_total") {
+	if !strings.Contains(string(b), "nats_oidc_callout_authorization_requests_total") {
 		t.Error("scraped body missing the requests metric")
 	}
 

@@ -14,9 +14,9 @@ import (
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
 
-	"github.com/sylr/nats-jwt-callout/internal/authz"
-	"github.com/sylr/nats-jwt-callout/internal/metrics"
-	"github.com/sylr/nats-jwt-callout/internal/verifier"
+	"github.com/sylr/nats-oidc-callout/internal/authz"
+	"github.com/sylr/nats-oidc-callout/internal/metrics"
+	"github.com/sylr/nats-oidc-callout/internal/verifier"
 )
 
 // errDenied is the generic error returned to the NATS server on any failure.

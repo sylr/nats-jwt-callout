@@ -16,11 +16,11 @@ import (
 	"github.com/nats-io/nkeys"
 	calloutlib "github.com/synadia-io/callout.go"
 
-	"github.com/sylr/nats-jwt-callout/internal/authz"
-	"github.com/sylr/nats-jwt-callout/internal/callout"
-	"github.com/sylr/nats-jwt-callout/internal/metrics"
-	"github.com/sylr/nats-jwt-callout/internal/mockoidc"
-	"github.com/sylr/nats-jwt-callout/internal/verifier"
+	"github.com/sylr/nats-oidc-callout/internal/authz"
+	"github.com/sylr/nats-oidc-callout/internal/callout"
+	"github.com/sylr/nats-oidc-callout/internal/metrics"
+	"github.com/sylr/nats-oidc-callout/internal/mockoidc"
+	"github.com/sylr/nats-oidc-callout/internal/verifier"
 )
 
 const (

@@ -24,13 +24,13 @@ func TestMetricsRecorded(t *testing.T) {
 
 	body := scrapeMetrics(t, h)
 
-	if v := metricValue(t, body, `nats_jwt_callout_authorization_requests_total{result="allowed"}`); v < 1 {
+	if v := metricValue(t, body, `nats_oidc_callout_authorization_requests_total{result="allowed"}`); v < 1 {
 		t.Errorf("allowed requests = %v, want >= 1\n%s", v, body)
 	}
-	if v := metricValue(t, body, `nats_jwt_callout_authorization_requests_total{result="denied"}`); v < 1 {
+	if v := metricValue(t, body, `nats_oidc_callout_authorization_requests_total{result="denied"}`); v < 1 {
 		t.Errorf("denied requests = %v, want >= 1", v)
 	}
-	if v := metricValue(t, body, `nats_jwt_callout_authorization_denials_total{reason="no_token"}`); v < 1 {
+	if v := metricValue(t, body, `nats_oidc_callout_authorization_denials_total{reason="no_token"}`); v < 1 {
 		t.Errorf("no_token denials = %v, want >= 1", v)
 	}
 }

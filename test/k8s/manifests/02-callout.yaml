@@ -27,7 +27,7 @@ data:
       require_claims:
         kubernetes.io.namespace: "nats-callout-e2e"
     oidc_ca_cert: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-    policy_file: "/etc/nats-jwt-callout/policy.yaml"
+    policy_file: "/etc/nats-oidc-callout/policy.yaml"
   policy.yaml: |
     rules:
     - name: k8s-client
@@ -59,12 +59,12 @@ spec:
       serviceAccountName: nats-callout
       containers:
       - name: callout
-        image: nats-jwt-callout:e2e
+        image: nats-oidc-callout:e2e
         imagePullPolicy: IfNotPresent
-        args: ["-config", "/etc/nats-jwt-callout/config.yaml", "-log-level", "debug"]
+        args: ["-config", "/etc/nats-oidc-callout/config.yaml", "-log-level", "debug"]
         volumeMounts:
         - name: config
-          mountPath: /etc/nats-jwt-callout
+          mountPath: /etc/nats-oidc-callout
           readOnly: true
       volumes:
       - name: config

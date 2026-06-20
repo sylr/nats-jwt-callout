@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sylr/nats-jwt-callout/internal/authz"
+	"github.com/sylr/nats-oidc-callout/internal/authz"
 )
 
 // TestGitHubActionsToken exercises the full callout flow with a REAL GitHub
@@ -155,7 +155,7 @@ func requestGitHubToken(t *testing.T, reqURL, reqToken, audience string) string 
 		t.Fatalf("build token request: %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+reqToken)
-	req.Header.Set("User-Agent", "nats-jwt-callout-e2e")
+	req.Header.Set("User-Agent", "nats-oidc-callout-e2e")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

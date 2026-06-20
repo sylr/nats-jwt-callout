@@ -6,7 +6,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/sylr/nats-jwt-callout/internal/mockoidc"
+	"github.com/sylr/nats-oidc-callout/internal/mockoidc"
 )
 
 const (

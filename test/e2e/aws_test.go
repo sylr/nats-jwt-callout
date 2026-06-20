@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sylr/nats-jwt-callout/internal/authz"
-	"github.com/sylr/nats-jwt-callout/lib/awsauth"
+	"github.com/sylr/nats-oidc-callout/internal/authz"
+	"github.com/sylr/nats-oidc-callout/lib/awsauth"
 )
 
 func TestAWSRealToken(t *testing.T) {

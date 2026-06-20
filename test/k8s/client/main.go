@@ -18,7 +18,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/sylr/nats-jwt-callout/lib/k8sauth"
+	"github.com/sylr/nats-oidc-callout/lib/k8sauth"
 )
 
 func main() {

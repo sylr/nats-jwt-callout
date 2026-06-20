@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/cel-go/cel"
 
-	"github.com/sylr/nats-jwt-callout/internal/identity"
+	"github.com/sylr/nats-oidc-callout/internal/identity"
 )
 
 // celCostLimit bounds the cost of a single CEL evaluation so an expensive

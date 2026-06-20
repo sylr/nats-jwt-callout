@@ -1,4 +1,4 @@
-module github.com/sylr/nats-jwt-callout/lib/awsauth
+module github.com/sylr/nats-oidc-callout/lib/awsauth
 
 go 1.26.4
 
