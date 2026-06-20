@@ -17,7 +17,7 @@ builds:
   - -trimpath
   ldflags:
   - -s -w
-  - -X main.version={{.Version}}
+  - -X main.version=v{{.Version}}
   - -X main.commit={{.Commit}}
   - -X main.date={{.Date}}
   goos:
@@ -32,7 +32,7 @@ archives:
 - id: default
   formats: [tar.gz]
   name_template: >-
-    {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    {{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}
   format_overrides:
   - goos: windows
     formats: [zip]
@@ -88,14 +88,14 @@ dockers_v2:
   images:
   - "ghcr.io/sylr/nats-jwt-callout"
   tags:
-  - "{{ .Version }}"
+  - "v{{ .Version }}"
   platforms:
   - linux/amd64
   - linux/arm64
   dockerfile: Dockerfile
   labels:
     org.opencontainers.image.source: "https://github.com/sylr/nats-jwt-callout"
-    org.opencontainers.image.version: "{{ .Version }}"
+    org.opencontainers.image.version: "v{{ .Version }}"
     org.opencontainers.image.revision: "{{ .FullCommit }}"
 
 changelog:
