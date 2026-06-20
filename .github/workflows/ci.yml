@@ -145,10 +145,14 @@ jobs:
   k8s-e2e:
     runs-on: ubuntu-latest
     # Uses the Docker daemon preinstalled on the runner; kind and kubectl come
-    # from the Nix dev shell. The image is built by the buildx step below (with
-    # a layer cache); run.sh then creates a kind cluster, loads that image,
-    # deploys NATS + callout, and asserts the projected service-account-token
-    # flow (allow nats-client / deny default SA).
+    # from the Nix dev shell. run.sh creates a kind cluster, builds + loads the
+    # callout image, deploys NATS + callout, and asserts the projected
+    # service-account-token flow (allow nats-client / deny default SA).
+    #
+    # The image build is left to run.sh's plain `docker build`: experiments with
+    # buildx layer caching and BuildKit cache-mount persistence (cache-dance)
+    # only matched this baseline -- the kind spin-up + deploy + assert (~64s),
+    # not the build, dominates the job.
     steps:
     - uses: actions/checkout@v7
     - uses: cachix/install-nix-action@v31
@@ -165,36 +169,5 @@ jobs:
         restore-prefixes-first-match: nix-${{ runner.os }}-${{ github.job }}-
         gc-max-store-size-linux: 1G
 
-    # Build the callout image with buildx and persist the Go module + build
-    # caches across runs. The Dockerfile uses BuildKit cache mounts for them;
-    # actions/cache stores those dirs and buildkit-cache-dance injects them into
-    # / extracts them from the build. This caches the compile (the real cost),
-    # which a Docker layer cache cannot once `COPY . .` changes.
-    - uses: docker/setup-buildx-action@v4
-    - uses: actions/cache@v4
-      with:
-        path: |
-          go-build-cache
-          go-mod-cache
-        key: ${{ runner.os }}-k8s-image-go-${{ hashFiles('go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-k8s-image-go-
-    - uses: reproducible-containers/buildkit-cache-dance@v3
-      with:
-        cache-map: |
-          {
-            "go-build-cache": "/root/.cache/go-build",
-            "go-mod-cache": "/go/pkg/mod"
-          }
-    - uses: docker/build-push-action@v7
-      with:
-        context: .
-        file: test/k8s/Dockerfile
-        tags: nats-jwt-callout:e2e
-        load: true
-        provenance: false
-
     - name: Kubernetes service-account-token e2e (kind)
-      env:
-        SKIP_BUILD: "1"
       run: nix develop .#ci-k8s-e2e --command bash test/k8s/run.sh
