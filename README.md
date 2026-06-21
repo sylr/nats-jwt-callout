@@ -21,13 +21,15 @@ sequenceDiagram
     participant S as NATS server
     participant A as nats-oidc-callout
 
-    C->>P: request OIDC token (audience)
-    P-->>C: signed OIDC token
-    C->>S: CONNECT — nats.Token(<JWT>)
-    S->>A: AuthorizationRequest<br/>($SYS.REQ.USER.AUTH, xkey-encrypted)
-    Note over A: verify OIDC via JWKS →<br/>policy match → sign user JWT
-    A-->>S: AuthorizationResponse<br/>(signed user JWT)
-    S-->>C: authorized — bound to account + permissions
+    loop on every (re)connect
+        C->>P: request OIDC token (audience)
+        P-->>C: signed OIDC token
+        C->>S: CONNECT — nats.Token(<fresh JWT>)
+        S->>A: AuthorizationRequest<br/>($SYS.REQ.USER.AUTH, xkey-encrypted)
+        Note over A: verify OIDC via JWKS →<br/>require_claims → policy match →<br/>sign user JWT
+        A-->>S: AuthorizationResponse<br/>(signed user JWT)
+        S-->>C: authorized — bound to account + permissions
+    end
 ```
 
 1. The client obtains an OIDC token (e.g.
