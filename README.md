@@ -69,7 +69,7 @@ Generate the keys the server and service share (using the NATS `nk` tool). With
 `-pubout`, `nk -gen` prints **two lines**: the seed first, then its public key.
 
 ```sh
-go install github.com/nats-io/nkeys/nk@latest   # install the nk tool
+go install github.com/nats-io/nkeys/nk@latest  # install the nk tool
 
 nk -gen account -pubout   # line 1: account seed (SA…)  → issuer_account_seed
                           # line 2: account public (A…) → auth_callout.issuer
@@ -106,7 +106,7 @@ Outbound web identity federation must be enabled on the account, and the calling
 principal needs `sts:GetWebIdentityToken`:
 
 ```sh
-aws iam enable-outbound-web-identity-federation   # one-time, per account
+aws iam enable-outbound-web-identity-federation  # one-time, per account
 ```
 
 ```json
@@ -130,6 +130,51 @@ aws iam get-outbound-web-identity-federation-info
 > `GetWebIdentityToken` is **not** available on the STS global endpoint — set a
 > region (`AWS_REGION` / `--region`).
 
+## Claim names (flattening)
+
+`require_claims` keys and policy `claims` keys are matched against a **flattened**
+view of the verified token, not its raw JSON. Three rules:
+
+1. **Nested objects are flattened with `.`** — the `.` is a *literal part of the
+   key name*, **not** a JSON-path operator.
+2. **The AWS namespace `https://sts.amazonaws.com/` is rewritten to the `aws`
+   prefix**, so its keys can't collide with a top-level claim of the same bare
+   name from another issuer.
+3. **Arrays and the registered claims `iss`/`sub`/`aud`/`exp`/`nbf`/`iat` are not
+   matchable** here — arrays are dropped, and the registered claims are matched
+   only via the verifier-validated `issuer`/`sub`/… fields.
+
+So an AWS web-identity token like:
+
+```json
+{
+  "iss": "https://….tokens.sts.global.api.aws",
+  "sub": "arn:aws:iam::049417292754:role/…",
+  "https://sts.amazonaws.com/": {
+    "aws_account": "049417292754",
+    "org_id": "o-fi16g7tiof",
+    "ou_path": ["o-fi16g7tiof/r-rhfz/…"]
+  }
+}
+```
+
+flattens to these matchable keys:
+
+```
+aws.aws_account   = "049417292754"
+aws.org_id        = "o-fi16g7tiof"
+# aws.ou_path      → dropped (array)
+# iss / sub        → not here; matched via the verified issuer/sub fields
+```
+
+So the issuer binding is written with the flattened key:
+
+```yaml
+require_claims:
+  aws.aws_account: "049417292754"                           # ✅ literal flattened key
+  "https://sts.amazonaws.com/.aws_account": "049417292754"  # ❌ no such key exists
+```
+
 ## GitHub Actions
 
 GitHub issues every workflow job (with `permissions: id-token: write`) a
@@ -140,15 +185,15 @@ short-lived OIDC token. It's a standard OIDC token from issuer
 
 ```yaml
 issuers:
-  - url: "https://token.actions.githubusercontent.com"
-    require_claims: { repository_owner: "your-org" }
+- url: "https://token.actions.githubusercontent.com"
+  require_claims: { repository_owner: "your-org" }
 ```
 
 ```yaml
 # policy
 - match:
     issuer: "https://token.actions.githubusercontent.com"
-    claims: { repository: "your-org/your-repo" }   # pin the repo, not just the owner
+    claims: { repository: "your-org/your-repo" }  # pin the repo, not just the owner
   grant: { account: APP, subscribe: { allow: ["telemetry.>"] } }
 ```
 
@@ -290,8 +335,8 @@ An optional Prometheus endpoint is exposed when configured:
 ```yaml
 metrics:
   enabled: true
-  address: ":9090"      # default when enabled
-  path: "/metrics"       # default
+  address: ":9090"  # default when enabled
+  path: "/metrics"  # default
 ```
 
 It serves:
@@ -322,7 +367,7 @@ Disabled by default — no listener is opened and nothing is collected unless
 ## Tests
 
 ```sh
-go test -race ./...                                   # unit + hermetic e2e (mock OIDC IdP)
+go test -race ./...  # unit + hermetic e2e (mock OIDC IdP)
 
 E2E_AWS=1 AWS_REGION=us-east-1 E2E_AWS_AUDIENCE=nats://callout-e2e \
   go test -tags e2e_aws -run AWS ./test/e2e/...       # real AWS (gated)
