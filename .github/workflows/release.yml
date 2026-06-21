@@ -53,9 +53,9 @@ jobs:
 
   # Publish the Helm chart as an OCI artifact to ghcr.io alongside the image.
   # Runs after goreleaser so the chart's appVersion points at an image that has
-  # already been pushed. The chart version comes from Chart.yaml (bump it per
-  # chart change); appVersion is overridden to the released tag so the published
-  # chart pulls the matching image by default.
+  # already been pushed. Both the chart version and appVersion are set from the
+  # release tag, so each release is a unique, immutable chart version whose
+  # default image tag matches the released binary.
   helm-chart:
     runs-on: ubuntu-latest
     needs: goreleaser
