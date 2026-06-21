@@ -1,0 +1,166 @@
+# Default values for nats-oidc-callout.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/sylr/nats-oidc-callout
+  pullPolicy: IfNotPresent
+  # Overrides the image tag. Defaults to the chart's appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Log level passed via -log-level: debug, info, warn, error.
+logLevel: info
+
+# -- Service configuration --------------------------------------------------
+#
+# The service is driven by a single config file (-config). That file holds
+# secrets (issuer_account_seed, xkey_seed, nats.password), so the chart renders
+# the whole thing into a Secret.
+#
+# `config.values` is passed through VERBATIM as the rendered config.yaml — use
+# the exact schema from examples/config.yaml in the repo (snake_case keys,
+# nested issuers, etc.). The policy may be inline here (`policy:`) or kept in a
+# separate ConfigMap via `policy.values` below (then set `policy_file` here to
+# /etc/nats-oidc-callout/policy.yaml).
+config:
+  # Bring your own Secret instead of rendering one from `config.values`.
+  # The Secret must contain a key holding the full config YAML.
+  existingSecret: ""
+  existingSecretKey: config.yaml
+
+  # Rendered verbatim into the Secret as config.yaml when existingSecret is empty.
+  # Replace the demo values below — never ship the example seeds to production.
+  values:
+    nats:
+      url: "tls://nats:4222"
+      username: "auth"
+      password: "change-me"
+      # ca_cert: "/etc/nats-oidc-callout/tls/ca.pem"
+      # client_cert: "/etc/nats-oidc-callout/tls/client.pem"
+      # client_key: "/etc/nats-oidc-callout/tls/client-key.pem"
+    issuer_account_seed: ""
+    xkey_seed: ""
+    audiences: []
+    signing_algs:
+    - "RS256"
+    issuers: []
+    http_timeout: "10s"
+    metrics:
+      enabled: true
+      address: ":9090"
+      path: "/metrics"
+    # Inline policy (first match wins). Alternatively keep it in a ConfigMap
+    # (see policy.values) and replace this with:
+    #   policy_file: "/etc/nats-oidc-callout/policy.yaml"
+    policy:
+      rules: []
+
+# -- Authorization policy (optional separate ConfigMap) ---------------------
+#
+# When `policy.values` is non-empty it is rendered into a ConfigMap and mounted
+# at /etc/nats-oidc-callout/policy.yaml. You must then point the config at it by
+# setting `config.values.policy_file: /etc/nats-oidc-callout/policy.yaml` and
+# removing the inline `config.values.policy` block above.
+policy:
+  existingConfigMap: ""
+  existingConfigMapKey: policy.yaml
+  values: {}
+
+# -- Metrics (Prometheus) ---------------------------------------------------
+#
+# Mirrors config.values.metrics. `port` must match the port in
+# config.values.metrics.address. Creates a headless-free ClusterIP Service for
+# scraping and, optionally, a Prometheus Operator ServiceMonitor.
+metrics:
+  enabled: true
+  port: 9090
+  path: /metrics
+  service:
+    type: ClusterIP
+    annotations: {}
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    relabelings: []
+    metricRelabelings: []
+
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
+
+# Restart the pods automatically when the rendered config/policy changes. The
+# service also supports SIGHUP hot-reload (no restart); for that, prefer a tool
+# like stakater/reloader with a signal strategy instead.
+restartOnConfigChange: true
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+    - ALL
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+# TCP probes against the metrics port. Only used when metrics.enabled is true
+# (the distroless image has no shell, so exec probes are not possible and there
+# is no dedicated health endpoint).
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 15
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 15
+
+# Optional PodDisruptionBudget (useful when running >1 replica).
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Spread replicas across nodes and zones. Soft (ScheduleAnyway) so a single
+# replica, a single-node cluster, or a single-zone cluster still schedules.
+# The pod labelSelector is injected automatically for any constraint that omits
+# one; set your own labelSelector to override. Set to [] to disable entirely.
+#
+# matchLabelKeys: [pod-template-hash] scopes the spread to the current revision
+# so a rolling update doesn't count old + new pods together (requires k8s 1.27+,
+# where MatchLabelKeys for pod topology spread is on by default).
+topologySpreadConstraints:
+- maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
+  matchLabelKeys:
+  - pod-template-hash
+
+# Extra volumes / mounts, e.g. NATS client TLS certs referenced from the config.
+extraVolumes: []
+extraVolumeMounts: []
+extraEnv: []

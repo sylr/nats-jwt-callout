@@ -1,0 +1,11 @@
+{{- if and (not .Values.policy.existingConfigMap) (not (empty .Values.policy.values)) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-policy" (include "nats-oidc-callout.fullname" .) }}
+  labels:
+    {{- include "nats-oidc-callout.labels" . | nindent 4 }}
+data:
+  policy.yaml: |
+    {{- toYaml .Values.policy.values | nindent 4 }}
+{{- end }}

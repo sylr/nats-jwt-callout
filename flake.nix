@@ -107,6 +107,11 @@
             # Docker comes from the runner; kind/kubectl from Nix.
             packages = [ pkgs.kind pkgs.kubectl ];
           };
+          ci-helm = pkgs.mkShell {
+            # helm lints/packages/pushes the chart (contribs/chart); kubeconform
+            # validates the rendered manifests against the k8s OpenAPI schemas.
+            packages = [ pkgs.kubernetes-helm pkgs.kubeconform ];
+          };
           ci-release = pkgs.mkShell {
             # goreleaser builds the Go binaries (go) and the SBOMs (syft).
             # buildx/qemu/docker for the container images come from the runner.

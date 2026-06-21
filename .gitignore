@@ -4,6 +4,7 @@
 *.test
 .DS_Store
 .envrc.local
+nats-oidc-callout-*.tgz
 
 # Local secrets — never commit real seeds or creds.
 *.creds

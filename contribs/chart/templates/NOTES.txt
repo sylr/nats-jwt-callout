@@ -1,0 +1,47 @@
+{{ .Chart.Name }} {{ .Chart.AppVersion }} has been deployed as release "{{ .Release.Name }}".
+
+The service is a NATS client: it connects out to {{ .Values.config.values.nats.url | default "your NATS server" }}
+and answers auth-callout requests on $SYS.REQ.USER.AUTH. There is no inbound
+application traffic to expose.
+
+Check it is running and connected:
+
+  kubectl --namespace {{ .Release.Namespace }} rollout status deployment/{{ include "nats-oidc-callout.fullname" . }}
+  kubectl --namespace {{ .Release.Namespace }} logs -l app.kubernetes.io/instance={{ .Release.Name }} -f
+
+{{- if .Values.config.existingSecret }}
+
+Config is read from existing Secret "{{ .Values.config.existingSecret }}"
+(key "{{ .Values.config.existingSecretKey }}").
+{{- else }}
+
+Config is rendered into Secret "{{ include "nats-oidc-callout.fullname" . }}".
+IMPORTANT: make sure you replaced the demo values for
+  config.values.issuer_account_seed
+  config.values.xkey_seed
+  config.values.nats.password
+with your own secrets (ideally via --set-file / a sealed secret / existingSecret).
+{{- end }}
+
+{{- if .Values.metrics.enabled }}
+
+Prometheus metrics are exposed on the Service
+"{{ printf "%s-metrics" (include "nats-oidc-callout.fullname" .) }}:{{ .Values.metrics.port }}{{ .Values.metrics.path }}".
+{{- if not .Values.metrics.serviceMonitor.enabled }}
+Set metrics.serviceMonitor.enabled=true to scrape it with the Prometheus Operator.
+{{- end }}
+{{- end }}
+
+Applying config changes:
+{{- if .Values.restartOnConfigChange }}
+A checksum annotation triggers a rolling restart whenever the rendered config or
+policy changes, so `helm upgrade` rolls the pods automatically.
+{{- else }}
+restartOnConfigChange is disabled; roll the pods yourself after a config change:
+
+  kubectl --namespace {{ .Release.Namespace }} rollout restart deployment/{{ include "nats-oidc-callout.fullname" . }}
+{{- end }}
+
+The binary also hot-reloads on SIGHUP, but the distroless image has no shell, so
+you cannot `kubectl exec ... kill`. For zero-restart reloads, use a controller
+that signals PID 1 (e.g. stakater/reloader with a signal strategy).

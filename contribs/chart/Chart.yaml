@@ -1,0 +1,20 @@
+apiVersion: v2
+name: nats-oidc-callout
+description: |
+  NATS auth callout service that authenticates NATS clients using OIDC tokens
+  (AWS Web Identity, GitHub Actions, Kubernetes service-account tokens) and
+  mints signed NATS user JWTs.
+type: application
+version: 0.0.0
+appVersion: 0.0.0
+home: https://github.com/sylr/nats-oidc-callout
+sources:
+- https://github.com/sylr/nats-oidc-callout
+keywords:
+- nats
+- oidc
+- auth-callout
+- authentication
+maintainers:
+- name: Sylvain Rabot
+  url: https://github.com/sylr

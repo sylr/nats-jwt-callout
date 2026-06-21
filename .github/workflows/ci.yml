@@ -197,3 +197,44 @@ jobs:
 
     - name: Kubernetes service-account-token e2e (kind)
       run: nix develop .#ci-k8s-e2e --command bash test/k8s/run.sh
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+    # Cache /nix/store across runs so the dev shell isn't re-realized from
+    # cache.nixos.org every time. Per-job key (github.job) because each job's
+    # shell has a different closure; gc caps the store before saving so the
+    # GitHub cache entry stays bounded.
+    - uses: nix-community/cache-nix-action@v7
+      with:
+        primary-key: nix-${{ runner.os }}-${{ github.job }}-${{ hashFiles('flake.nix', 'flake.lock') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-${{ github.job }}-
+        gc-max-store-size-linux: 1G
+
+    - name: helm lint
+      run: nix develop .#ci-helm --command helm lint contribs/chart
+
+    # Render several value permutations and validate every manifest against the
+    # k8s OpenAPI schemas. -ignore-missing-schemas skips CRDs (ServiceMonitor)
+    # that have no published schema.
+    - name: helm template + kubeconform
+      run: |
+        nix develop .#ci-helm --command bash -c '
+          set -euo pipefail
+          permutations=(
+            ""
+            "--set metrics.enabled=false"
+            "--set metrics.serviceMonitor.enabled=true --set podDisruptionBudget.enabled=true --set replicaCount=2"
+            "--set config.existingSecret=ext --set policy.values.rules[0].name=k8s-app"
+          )
+          for v in "${permutations[@]}"; do
+            echo "== helm template $v =="
+            helm template t contribs/chart $v \
+              | kubeconform -strict -summary -ignore-missing-schemas \
+                  -kubernetes-version 1.31.0
+          done'
