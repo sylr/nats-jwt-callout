@@ -13,10 +13,10 @@ Ingress and no client-facing Service.
 
 ```sh
 # from a local checkout
-helm install my-callout deploy/chart -f my-values.yaml
+helm install my-callout contribs/chart -f my-values.yaml
 
-# or from the OCI registry (once published)
-helm install my-callout oci://ghcr.io/sylr/charts/nats-oidc-callout --version 0.1.0 -f my-values.yaml
+# or from the OCI registry (once published; --version is the released tag)
+helm install my-callout oci://ghcr.io/sylr/helm-charts/nats-oidc-callout --version 0.0.6 -f my-values.yaml
 ```
 
 ## Configuration model

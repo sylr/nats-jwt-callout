@@ -83,7 +83,7 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           echo "$REGISTRY_TOKEN" | helm registry login ghcr.io -u "$REGISTRY_USER" --password-stdin
-          repo="oci://ghcr.io/$OWNER/charts"
+          repo="oci://ghcr.io/$OWNER/helm-charts"
           # Each release tag is a unique, immutable chart version (== appVersion).
           # ghcr.io has no tag immutability, so helm push would SILENTLY overwrite
           # an existing version -- guard so a re-run of the same tag is a no-op
